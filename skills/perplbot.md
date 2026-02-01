@@ -217,6 +217,8 @@ const { bidOrder, askOrder } = mm.generateOrders(quotes);
 - BTC: 0
 - ETH: 1
 - SOL: 2
+- MON: 3
+- ZEC: 4
 
 ## Price/Size Formats
 - Prices in PNS (6 decimals): `45000 USDC = 45000000000`

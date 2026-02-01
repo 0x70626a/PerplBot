@@ -116,6 +116,8 @@ const positions = await portfolio.getPositions();
 | BTC    | 0       |
 | ETH    | 1       |
 | SOL    | 2       |
+| MON    | 3       |
+| ZEC    | 4       |
 
 ## Configuration
 

@@ -18,6 +18,8 @@ const PERP_NAMES: Record<string, bigint> = {
   btc: PERPETUALS.BTC,
   eth: PERPETUALS.ETH,
   sol: PERPETUALS.SOL,
+  mon: PERPETUALS.MON,
+  zec: PERPETUALS.ZEC,
 };
 
 function resolvePerpId(perp: string): bigint {

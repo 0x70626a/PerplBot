@@ -20,7 +20,8 @@ export const PERPETUALS = {
   BTC: 0n,
   ETH: 1n,
   SOL: 2n,
-  // Add more as needed
+  MON: 3n,
+  ZEC: 4n,
 } as const;
 
 /**
