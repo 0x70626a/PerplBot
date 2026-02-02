@@ -36,8 +36,123 @@ PerplBot provides a TypeScript SDK and CLI for building trading bots on Perpl. I
 
 ```bash
 npm install
+```
+
+## Getting Started
+
+### Option 1: Automated Setup (Recommended)
+
+Run the setup script to install dependencies and generate wallets:
+
+```bash
+npm run setup
+```
+
+Or just generate wallets:
+
+```bash
+npm run generate-wallets
+```
+
+### Option 2: Manual Setup
+
+#### Step 1: Generate Wallets
+
+You need two wallets:
+- **Owner (Cold) Wallet**: For deployment, deposits, withdrawals
+- **Operator (Hot) Wallet**: For trading only (cannot withdraw)
+
+Generate wallets using one of these methods:
+
+**Using the built-in script:**
+```bash
+npx tsx scripts/generate-wallets.ts
+```
+
+**Using Node.js directly:**
+```bash
+npx tsx -e "
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+const pk = generatePrivateKey();
+const account = privateKeyToAccount(pk);
+console.log('Address:', account.address);
+console.log('Private Key:', pk);
+"
+```
+
+Run twice — once for owner, once for operator.
+
+**Using Foundry:**
+```bash
+cast wallet new
+```
+
+#### Step 2: Configure Environment
+
+Copy the example environment file:
+
+```bash
 cp .env.example .env
-# Configure your .env with RPC URL and wallet keys
+```
+
+Edit `.env` and add your wallet private keys:
+
+```env
+# Monad Testnet Configuration
+MONAD_RPC_URL=https://testnet-rpc.monad.xyz
+CHAIN_ID=10143
+
+# Contract Addresses (Monad Testnet)
+EXCHANGE_ADDRESS=0x9C216D1Ab3e0407b3d6F1d5e9EfFe6d01C326ab7
+COLLATERAL_TOKEN=0xdF5B718d8FcC173335185a2a1513eE8151e3c027
+
+# Wallet Private Keys
+OWNER_PRIVATE_KEY=0x...your_owner_private_key...
+OPERATOR_PRIVATE_KEY=0x...your_operator_private_key...
+
+# Set after deploying DelegatedAccount
+DELEGATED_ACCOUNT_ADDRESS=
+```
+
+#### Step 3: Fund Your Wallets
+
+1. **Get testnet MON** (for gas) from the Monad faucet
+   - Fund the owner wallet address
+
+2. **Get testnet USDC** (for trading collateral)
+   - You'll need USDC in the owner wallet to deposit
+
+#### Step 4: Deploy DelegatedAccount
+
+Deploy your trading account with an initial deposit:
+
+```bash
+npm run dev -- deploy --operator <YOUR_OPERATOR_ADDRESS> --deposit 100
+```
+
+This will:
+1. Deploy a new DelegatedAccount contract
+2. Register your operator wallet
+3. Deposit 100 USDC as trading collateral
+
+After deployment, add the contract address to your `.env`:
+
+```env
+DELEGATED_ACCOUNT_ADDRESS=0x...deployed_address...
+```
+
+#### Step 5: Start Trading
+
+Check your account status:
+
+```bash
+npm run dev -- manage status
+```
+
+Open a position:
+
+```bash
+npm run dev -- trade open --perp btc --side long --size 0.1 --price 45000 --leverage 10
 ```
 
 ## Quick Start

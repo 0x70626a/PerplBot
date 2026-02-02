@@ -8,6 +8,9 @@ dist/
 .env
 .env.local
 
+# Key storage
+.perplbot/
+
 # IDE
 .idea/
 .vscode/

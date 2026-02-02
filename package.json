@@ -13,7 +13,9 @@
     "dev": "tsx src/cli/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-vm-modules node_modules/vitest/vitest.mjs run",
-    "test:watch": "node --experimental-vm-modules node_modules/vitest/vitest.mjs"
+    "test:watch": "node --experimental-vm-modules node_modules/vitest/vitest.mjs",
+    "setup": "./scripts/setup.sh",
+    "generate-wallets": "tsx scripts/generate-wallets.ts"
   },
   "keywords": [
     "perpl",
