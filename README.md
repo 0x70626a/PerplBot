@@ -199,11 +199,20 @@ npm run dev -- trade open --perp btc --side long --size 0.1 --price 45000 --leve
 # Deploy a new delegated account
 npm run dev -- deploy --implementation <addr> --operator <hot-wallet> --deposit 100
 
+# View available markets with prices and funding rates
+npm run dev -- manage markets
+
 # Open a long position
 npm run dev -- trade open --perp btc --side long --size 0.1 --price 45000 --leverage 10
 
 # Check account status
 npm run dev -- manage status
+
+# Cancel an order
+npm run dev -- trade cancel --perp btc --order-id 123
+
+# Cancel all orders on a market
+npm run dev -- trade cancel-all --perp btc
 
 # Withdraw funds (owner only)
 npm run dev -- manage withdraw --amount 100
@@ -272,7 +281,22 @@ Perpetual IDs from [dex-sdk testnet config](https://github.com/PerplFoundation/d
 | MON    | 64      |
 | ZEC    | 256     |
 
-Use `npx tsx scripts/check-markets.ts` to check market status and prices.
+View live market data with:
+
+```bash
+npm run dev -- manage markets
+```
+
+Output:
+```
+Symbol  Mark Price    Oracle Price  Funding/8h  Long OI     Short OI    Status
+--------------------------------------------------------------------------------
+BTC     $77,746.50    $77,745.50    +0.0150%    35.3789     35.3789     Active
+ETH     $2,304.16     $2,303.45     +0.0240%    656.571     656.571     Active
+SOL     $102.90       $102.89       -0.0130%    4374.687    4374.687    Active
+MON     $0.02         $0.02         -0.0500%    22240799    22240799    Active
+ZEC     $298.26       $298.42       +0.0500%    594.275     594.275     Active
+```
 
 ## Configuration
 
