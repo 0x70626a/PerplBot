@@ -87,7 +87,7 @@ export function registerManageCommand(program: Command): void {
   manage
     .command("withdraw")
     .description("Withdraw collateral from exchange to owner wallet")
-    .requiredOption("--amount <amount>", "Amount to withdraw in USDC")
+    .requiredOption("--amount <amount>", "Amount to withdraw in USD stable")
     .action(async (options) => {
       const config = loadEnvConfig();
       validateOwnerConfig(config);
@@ -107,7 +107,7 @@ export function registerManageCommand(program: Command): void {
       const amount = parseFloat(options.amount);
       const amountCNS = BigInt(Math.round(amount * 1e6));
 
-      console.log(`Withdrawing ${amount} USDC...`);
+      console.log(`Withdrawing ${amount} USD stable...`);
 
       try {
         const txHash = await owner.withdrawCollateral(amountCNS);
@@ -122,7 +122,7 @@ export function registerManageCommand(program: Command): void {
   manage
     .command("deposit")
     .description("Deposit collateral to exchange account")
-    .requiredOption("--amount <amount>", "Amount to deposit in USDC")
+    .requiredOption("--amount <amount>", "Amount to deposit in USD stable")
     .action(async (options) => {
       const config = loadEnvConfig();
       validateOwnerConfig(config);
@@ -142,7 +142,7 @@ export function registerManageCommand(program: Command): void {
       const amount = parseFloat(options.amount);
       const amountCNS = BigInt(Math.round(amount * 1e6));
 
-      console.log(`Depositing ${amount} USDC...`);
+      console.log(`Depositing ${amount} USD stable...`);
 
       try {
         const { transferHash, depositHash } = await owner.depositCollateral(
@@ -204,10 +204,10 @@ export function registerManageCommand(program: Command): void {
         const accountInfo = await exchange.getAccountById(accountId);
 
         console.log("\n=== Exchange Account ===");
-        console.log(`Balance: ${Number(accountInfo.balanceCNS) / 1e6} USDC`);
-        console.log(`Locked: ${Number(accountInfo.lockedBalanceCNS) / 1e6} USDC`);
+        console.log(`Balance: ${Number(accountInfo.balanceCNS) / 1e6} USD stable`);
+        console.log(`Locked: ${Number(accountInfo.lockedBalanceCNS) / 1e6} USD stable`);
         console.log(
-          `Available: ${Number(accountInfo.balanceCNS - accountInfo.lockedBalanceCNS) / 1e6} USDC`
+          `Available: ${Number(accountInfo.balanceCNS - accountInfo.lockedBalanceCNS) / 1e6} USD stable`
         );
 
         // Get positions
@@ -245,7 +245,7 @@ export function registerManageCommand(program: Command): void {
         console.log("\n=== Owner Wallet ===");
         console.log(`Address: ${owner.address}`);
         console.log(`ETH: ${Number(ownerEthBalance) / 1e18}`);
-        console.log(`USDC: ${Number(ownerTokenBalance) / 1e6}`);
+        console.log(`USD stable: ${Number(ownerTokenBalance) / 1e6}`);
       } catch (error) {
         console.error("Failed to fetch status:", error);
         process.exit(1);

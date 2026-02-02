@@ -124,8 +124,8 @@ DELEGATED_ACCOUNT_ADDRESS=
 1. **Get testnet MON** (for gas) from the Monad faucet
    - Fund the owner wallet address
 
-2. **Get testnet USDC** (for trading collateral)
-   - You'll need USDC in the owner wallet to deposit
+2. **Get testnet USD stable** (for trading collateral)
+   - You'll need USD stable tokens in the owner wallet to deposit
 
 #### Step 4: Deploy DelegatedAccount
 
@@ -141,7 +141,7 @@ This will:
 1. Deploy the DelegatedAccount implementation contract
 2. Deploy a proxy pointing to the implementation
 3. Register your operator wallet
-4. Deposit 100 USDC as trading collateral
+4. Deposit 100 USD stable as trading collateral
 
 **Option B: Step-by-step deployment**
 

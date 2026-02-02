@@ -22,7 +22,7 @@ export function registerDeployCommand(program: Command): void {
       "--operator <address>",
       "Address of the operator (hot wallet). If not specified, no operator is set initially."
     )
-    .option("--deposit <amount>", "Initial deposit amount in USDC", "0")
+    .option("--deposit <amount>", "Initial deposit amount in USD stable", "0")
     .action(async (options) => {
       const config = loadEnvConfig();
       validateOwnerConfig(config);
@@ -63,7 +63,7 @@ export function registerDeployCommand(program: Command): void {
         // Handle initial deposit if specified
         const depositAmount = parseFloat(options.deposit);
         if (depositAmount > 0) {
-          console.log(`\nCreating exchange account with ${depositAmount} USDC deposit...`);
+          console.log(`\nCreating exchange account with ${depositAmount} USD stable deposit...`);
 
           const amountCNS = BigInt(Math.round(depositAmount * 1e6));
           const { transferHash, createHash } = await owner.createExchangeAccount(

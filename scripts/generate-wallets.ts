@@ -53,7 +53,7 @@ console.log("\n=== Next Steps ===");
 console.log(`1. Fund the owner wallet with testnet MON for gas`);
 console.log(`   Address: ${ownerAccount.address}`);
 console.log("");
-console.log(`2. Get testnet USDC for trading collateral`);
+console.log(`2. Get testnet USD stable for trading collateral`);
 console.log("");
 console.log(`3. Deploy your DelegatedAccount:`);
 console.log(`   npm run dev -- deploy --operator ${operatorAccount.address} --deposit 100`);

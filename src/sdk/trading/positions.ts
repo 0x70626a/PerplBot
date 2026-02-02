@@ -7,7 +7,7 @@ import { type PositionInfo, PositionType } from "../contracts/Exchange.js";
 import { pnsToPrice, lnsToLot, PRICE_DECIMALS, LOT_DECIMALS } from "./orders.js";
 
 /**
- * Collateral decimals (USDC-like)
+ * Collateral decimals (USD stable)
  */
 export const COLLATERAL_DECIMALS = 6n;
 

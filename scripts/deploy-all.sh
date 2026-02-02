@@ -34,7 +34,7 @@ OPERATOR_ADDRESS=$(cast wallet address "$OPERATOR_PRIVATE_KEY" 2>/dev/null)
 
 echo "Owner:    $OWNER_ADDRESS"
 echo "Operator: $OPERATOR_ADDRESS"
-echo "Deposit:  $DEPOSIT_AMOUNT USDC"
+echo "Deposit:  $DEPOSIT_AMOUNT USD stable"
 echo ""
 
 # Step 1: Deploy Implementation

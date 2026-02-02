@@ -137,7 +137,7 @@ await operator.reduceLong({
 });
 
 // Add margin to position
-await operator.addMargin(0n, amountToCNS(100)); // Add 100 USDC
+await operator.addMargin(0n, amountToCNS(100)); // Add 100 USD stable
 ```
 
 ### Portfolio Queries
@@ -221,10 +221,10 @@ const { bidOrder, askOrder } = mm.generateOrders(quotes);
 - ZEC: 4
 
 ## Price/Size Formats
-- Prices in PNS (6 decimals): `45000 USDC = 45000000000`
+- Prices in PNS (6 decimals): `45000 USD stable = 45000000000`
 - Lot sizes in LNS (8 decimals): `0.1 BTC = 10000000`
 - Leverage in hundredths: `10x = 1000`
-- Collateral in CNS (6 decimals): `100 USDC = 100000000`
+- Collateral in CNS (6 decimals): `100 USD stable = 100000000`
 
 Helper functions: `priceToPNS()`, `lotToLNS()`, `leverageToHdths()`, `amountToCNS()`
 

@@ -37,7 +37,7 @@ describe("Position Parsing", () => {
     nextNodeId: 0n,
     prevNodeId: 0n,
     positionType: PositionType.Long,
-    depositCNS: 1000000000n, // 1000 USDC
+    depositCNS: 1000000000n, // 1000 USD stable
     pricePNS: 45000000000n, // 45000 USD
     lotLNS: 10000000n, // 0.1 BTC
     entryBlock: 1000n,
@@ -78,7 +78,7 @@ describe("PnL Calculations", () => {
     nextNodeId: 0n,
     prevNodeId: 0n,
     positionType: PositionType.Long,
-    depositCNS: 1000000000n, // 1000 USDC
+    depositCNS: 1000000000n, // 1000 USD stable
     pricePNS: 45000000000n, // 45000 USD entry
     lotLNS: 10000000n, // 0.1 BTC
     entryBlock: 1000n,
@@ -142,7 +142,7 @@ describe("Liquidation Calculations", () => {
     nextNodeId: 0n,
     prevNodeId: 0n,
     positionType: PositionType.Long,
-    depositCNS: 450000000n, // 450 USDC (10x leverage on 0.1 BTC at 45000)
+    depositCNS: 450000000n, // 450 USD stable (10x leverage on 0.1 BTC at 45000)
     pricePNS: 45000000000n, // 45000 USD
     lotLNS: 10000000n, // 0.1 BTC
     entryBlock: 1000n,
@@ -178,7 +178,7 @@ describe("Leverage Calculations", () => {
     nextNodeId: 0n,
     prevNodeId: 0n,
     positionType: PositionType.Long,
-    depositCNS: 450000000n, // 450 USDC
+    depositCNS: 450000000n, // 450 USD stable
     pricePNS: 45000000000n, // 45000 USD
     lotLNS: 10000000n, // 0.1 BTC
     entryBlock: 1000n,
@@ -229,7 +229,7 @@ describe("Risk Detection", () => {
     nextNodeId: 0n,
     prevNodeId: 0n,
     positionType: PositionType.Long,
-    depositCNS: 450000000n, // 450 USDC
+    depositCNS: 450000000n, // 450 USD stable
     pricePNS: 45000000000n, // 45000 USD
     lotLNS: 10000000n, // 0.1 BTC
     entryBlock: 1000n,

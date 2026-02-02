@@ -107,7 +107,7 @@ PerplBot/
 
 ### Contract Addresses (Monad Testnet)
 - Exchange: `0x9C216D1Ab3e0407b3d6F1d5e9EfFe6d01C326ab7`
-- Collateral (USDC): `0xdF5B718d8FcC173335185a2a1513eE8151e3c027`
+- Collateral (USD stable): `0xdF5B718d8FcC173335185a2a1513eE8151e3c027`
 
 ### Perpetual IDs
 - BTC: 0
