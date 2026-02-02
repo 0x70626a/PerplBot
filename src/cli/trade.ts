@@ -72,6 +72,12 @@ export function registerTradeCommand(program: Command): void {
       const price = parseFloat(options.price);
       const leverage = parseFloat(options.leverage);
 
+      // Fetch perpetual info to get correct decimals for this market
+      const exchange = new Exchange(config.chain.exchangeAddress, operator.publicClient);
+      const perpInfo = await exchange.getPerpetualInfo(perpId);
+      const priceDecimals = BigInt(perpInfo.priceDecimals);
+      const lotDecimals = BigInt(perpInfo.lotDecimals);
+
       console.log(`Opening ${side} position...`);
       console.log(`  Perpetual ID: ${perpId}`);
       console.log(`  Size: ${size}`);
@@ -84,8 +90,8 @@ export function registerTradeCommand(program: Command): void {
         if (side === "long") {
           txHash = await operator.openLong({
             perpId,
-            pricePNS: priceToPNS(price),
-            lotLNS: lotToLNS(size),
+            pricePNS: priceToPNS(price, priceDecimals),
+            lotLNS: lotToLNS(size, lotDecimals),
             leverageHdths: leverageToHdths(leverage),
             postOnly: options.postOnly ?? false,
             immediateOrCancel: options.ioc ?? false,
@@ -93,8 +99,8 @@ export function registerTradeCommand(program: Command): void {
         } else if (side === "short") {
           txHash = await operator.openShort({
             perpId,
-            pricePNS: priceToPNS(price),
-            lotLNS: lotToLNS(size),
+            pricePNS: priceToPNS(price, priceDecimals),
+            lotLNS: lotToLNS(size, lotDecimals),
             leverageHdths: leverageToHdths(leverage),
             postOnly: options.postOnly ?? false,
             immediateOrCancel: options.ioc ?? false,
@@ -138,6 +144,12 @@ export function registerTradeCommand(program: Command): void {
       const size = parseFloat(options.size);
       const price = parseFloat(options.price);
 
+      // Fetch perpetual info to get correct decimals for this market
+      const exchange = new Exchange(config.chain.exchangeAddress, operator.publicClient);
+      const perpInfo = await exchange.getPerpetualInfo(perpId);
+      const priceDecimals = BigInt(perpInfo.priceDecimals);
+      const lotDecimals = BigInt(perpInfo.lotDecimals);
+
       console.log(`Closing ${side} position...`);
       console.log(`  Perpetual ID: ${perpId}`);
       console.log(`  Size: ${size}`);
@@ -149,14 +161,14 @@ export function registerTradeCommand(program: Command): void {
         if (side === "long") {
           txHash = await operator.closeLong({
             perpId,
-            pricePNS: priceToPNS(price),
-            lotLNS: lotToLNS(size),
+            pricePNS: priceToPNS(price, priceDecimals),
+            lotLNS: lotToLNS(size, lotDecimals),
           });
         } else if (side === "short") {
           txHash = await operator.closeShort({
             perpId,
-            pricePNS: priceToPNS(price),
-            lotLNS: lotToLNS(size),
+            pricePNS: priceToPNS(price, priceDecimals),
+            lotLNS: lotToLNS(size, lotDecimals),
           });
         } else {
           console.error("Side must be 'long' or 'short'");

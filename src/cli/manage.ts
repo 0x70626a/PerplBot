@@ -248,16 +248,21 @@ export function registerManageCommand(program: Command): void {
           );
 
           if (position.lotLNS > 0n) {
-            const size = Number(position.lotLNS) / 1e5; // lotDecimals = 5
-            const entryPrice = Number(position.pricePNS) / 1e1; // priceDecimals = 1
-            const currentPrice = Number(markPrice) / 1e1; // priceDecimals = 1
+            // Fetch perpetual info to get correct decimals for this market
+            const perpInfo = await exchange.getPerpetualInfo(perpId);
+            const priceDecimals = Number(perpInfo.priceDecimals);
+            const lotDecimals = Number(perpInfo.lotDecimals);
+
+            const size = lnsToLot(position.lotLNS, BigInt(lotDecimals));
+            const entryPrice = pnsToPrice(position.pricePNS, BigInt(priceDecimals));
+            const currentPrice = pnsToPrice(markPrice, BigInt(priceDecimals));
             const pnl = Number(position.pnlCNS) / 1e6; // collateralDecimals = 6
 
             const posType = Number(position.positionType) === 0 ? "LONG" : "SHORT";
 
             console.log(`\n${name}:`);
             console.log(`  Type: ${posType}`);
-            console.log(`  Size: ${size}`);
+            console.log(`  Size: ${size.toFixed(lotDecimals)}`);
             console.log(`  Entry Price: $${entryPrice.toFixed(2)}`);
             console.log(`  Mark Price: $${currentPrice.toFixed(2)}`);
             console.log(`  PnL: $${pnl.toFixed(2)}`);
