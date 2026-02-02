@@ -196,7 +196,7 @@ export class Portfolio {
           accountId
         );
 
-        if (position.lotLNS === 0n || position.positionType === PositionType.None) {
+        if (position.lotLNS === 0n) {
           continue;
         }
 

@@ -65,7 +65,7 @@ describe("Position Parsing", () => {
   });
 
   it("parses an empty position", () => {
-    const position = createMockPosition({ positionType: PositionType.None });
+    const position = createMockPosition({ lotLNS: 0n });
     const parsed = parsePosition(position);
 
     expect(parsed.type).toBe("none");
@@ -129,7 +129,7 @@ describe("PnL Calculations", () => {
   });
 
   it("returns 0 PnL for empty position", () => {
-    const position = createMockPosition({ positionType: PositionType.None });
+    const position = createMockPosition({ lotLNS: 0n });
     const pnl = calculateUnrealizedPnL(position, 460000n);
 
     expect(pnl).toBe(0);

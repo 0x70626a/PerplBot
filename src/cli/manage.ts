@@ -1,189 +1,24 @@
 /**
- * Manage command - Account management operations (owner only)
+ * Manage command - Direct account management from owner wallet
  */
 
 import type { Command } from "commander";
-import type { Address } from "viem";
 import {
   loadEnvConfig,
   validateOwnerConfig,
   OwnerWallet,
   Exchange,
-  ExchangeStateTracker,
-  DelegatedAccount,
   PERPETUALS,
   ALL_PERP_IDS,
   pnsToPrice,
   lnsToLot,
 } from "../sdk/index.js";
+import { ERC20Abi, ExchangeAbi } from "../sdk/contracts/abi.js";
 
 export function registerManageCommand(program: Command): void {
   const manage = program
     .command("manage")
-    .description("Account management operations (owner only)");
-
-  // Add operator
-  manage
-    .command("add-operator")
-    .description("Add a new operator to the DelegatedAccount")
-    .requiredOption("--address <address>", "Operator address to add")
-    .action(async (options) => {
-      const config = loadEnvConfig();
-      validateOwnerConfig(config);
-
-      if (!config.delegatedAccountAddress) {
-        console.error("DELEGATED_ACCOUNT_ADDRESS is required");
-        process.exit(1);
-      }
-
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
-        config.chain
-      );
-
-      owner.connect(config.delegatedAccountAddress);
-
-      console.log(`Adding operator ${options.address}...`);
-
-      try {
-        const txHash = await owner.addOperator(options.address as Address);
-        console.log(`Transaction submitted: ${txHash}`);
-      } catch (error) {
-        console.error("Failed to add operator:", error);
-        process.exit(1);
-      }
-    });
-
-  // Remove operator
-  manage
-    .command("remove-operator")
-    .description("Remove an operator from the DelegatedAccount")
-    .requiredOption("--address <address>", "Operator address to remove")
-    .action(async (options) => {
-      const config = loadEnvConfig();
-      validateOwnerConfig(config);
-
-      if (!config.delegatedAccountAddress) {
-        console.error("DELEGATED_ACCOUNT_ADDRESS is required");
-        process.exit(1);
-      }
-
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
-        config.chain
-      );
-
-      owner.connect(config.delegatedAccountAddress);
-
-      console.log(`Removing operator ${options.address}...`);
-
-      try {
-        const txHash = await owner.removeOperator(options.address as Address);
-        console.log(`Transaction submitted: ${txHash}`);
-      } catch (error) {
-        console.error("Failed to remove operator:", error);
-        process.exit(1);
-      }
-    });
-
-  // Withdraw collateral
-  manage
-    .command("withdraw")
-    .description("Withdraw collateral from exchange to owner wallet")
-    .requiredOption("--amount <amount>", "Amount to withdraw in USD stable")
-    .action(async (options) => {
-      const config = loadEnvConfig();
-      validateOwnerConfig(config);
-
-      if (!config.delegatedAccountAddress) {
-        console.error("DELEGATED_ACCOUNT_ADDRESS is required");
-        process.exit(1);
-      }
-
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
-        config.chain
-      );
-
-      owner.connect(config.delegatedAccountAddress);
-
-      const amount = parseFloat(options.amount);
-      const amountCNS = BigInt(Math.round(amount * 1e6));
-
-      console.log(`Withdrawing ${amount} USD stable...`);
-
-      try {
-        const txHash = await owner.withdrawCollateral(amountCNS);
-        console.log(`Transaction submitted: ${txHash}`);
-      } catch (error) {
-        console.error("Withdrawal failed:", error);
-        process.exit(1);
-      }
-    });
-
-  // Deposit collateral
-  manage
-    .command("deposit")
-    .description("Deposit collateral to exchange account (creates account if needed)")
-    .requiredOption("--amount <amount>", "Amount to deposit in USD stable")
-    .action(async (options) => {
-      const config = loadEnvConfig();
-      validateOwnerConfig(config);
-
-      if (!config.delegatedAccountAddress) {
-        console.error("DELEGATED_ACCOUNT_ADDRESS is required");
-        process.exit(1);
-      }
-
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
-        config.chain
-      );
-
-      const delegatedAccount = owner.connect(config.delegatedAccountAddress);
-
-      const amount = parseFloat(options.amount);
-      const amountCNS = BigInt(Math.round(amount * 1e6));
-
-      // Check if exchange account exists
-      const accountId = await delegatedAccount.getAccountId();
-
-      if (accountId === 0n) {
-        // No account yet - create one with initial deposit
-        console.log(`Creating exchange account with ${amount} USD stable deposit...`);
-
-        try {
-          const { transferHash, createHash } = await owner.createExchangeAccount(
-            config.chain.collateralToken,
-            amountCNS
-          );
-          console.log(`Transfer tx: ${transferHash}`);
-          console.log(`Create account tx: ${createHash}`);
-
-          // Get the new account ID
-          const newAccountId = await delegatedAccount.getAccountId();
-          console.log(`Exchange account created with ID: ${newAccountId}`);
-        } catch (error) {
-          console.error("Account creation failed:", error);
-          process.exit(1);
-        }
-      } else {
-        // Account exists - deposit additional collateral
-        console.log(`Depositing ${amount} USD stable to account ${accountId}...`);
-
-        try {
-          const { transferHash, depositHash } = await owner.depositCollateral(
-            config.chain.collateralToken,
-            amountCNS
-          );
-          console.log(`Transfer tx: ${transferHash}`);
-          console.log(`Deposit tx: ${depositHash}`);
-        } catch (error) {
-          console.error("Deposit failed:", error);
-          process.exit(1);
-        }
-      }
-    });
+    .description("Account management (direct owner wallet)");
 
   // Account status
   manage
@@ -193,45 +28,51 @@ export function registerManageCommand(program: Command): void {
       const config = loadEnvConfig();
       validateOwnerConfig(config);
 
-      if (!config.delegatedAccountAddress) {
-        console.error("DELEGATED_ACCOUNT_ADDRESS is required");
-        process.exit(1);
-      }
-
       const owner = OwnerWallet.fromPrivateKey(
         config.ownerPrivateKey,
         config.chain
       );
 
-      const delegatedAccount = owner.connect(config.delegatedAccountAddress);
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient
+        owner.publicClient,
+        owner.walletClient
       );
 
       console.log("Fetching account status...\n");
 
       try {
-        // Get DelegatedAccount state
-        const state = await delegatedAccount.getState();
-        const accountId = state.accountId;
+        // Get account by owner address
+        let accountInfo;
+        try {
+          accountInfo = await exchange.getAccountByAddress(owner.address);
+        } catch {
+          console.log("=== Owner Wallet ===");
+          console.log(`Address: ${owner.address}`);
+          console.log("\nNo exchange account found.");
+          console.log("Use 'manage deposit' to create one.");
 
-        console.log("=== DelegatedAccount ===");
-        console.log(`Address: ${config.delegatedAccountAddress}`);
-        console.log(`Owner: ${state.owner}`);
-        console.log(`Exchange Account ID: ${accountId}`);
-        console.log(`Exchange: ${state.exchange}`);
-        console.log(`Collateral Token: ${state.collateralToken}`);
-
-        if (accountId === 0n) {
-          console.log("\nNo exchange account created yet.");
+          const ownerEthBalance = await owner.getEthBalance();
+          const ownerTokenBalance = await owner.getTokenBalance(
+            config.chain.collateralToken
+          );
+          console.log("\n=== Wallet Balances ===");
+          console.log(`ETH: ${Number(ownerEthBalance) / 1e18}`);
+          console.log(`USD stable: ${Number(ownerTokenBalance) / 1e6}`);
           return;
         }
 
-        // Get exchange account info
-        const accountInfo = await exchange.getAccountById(accountId);
+        if (accountInfo.accountId === 0n) {
+          console.log("=== Owner Wallet ===");
+          console.log(`Address: ${owner.address}`);
+          console.log("\nNo exchange account found.");
+          console.log("Use 'manage deposit' to create one.");
+          return;
+        }
 
-        console.log("\n=== Exchange Account ===");
+        console.log("=== Exchange Account ===");
+        console.log(`Owner: ${owner.address}`);
+        console.log(`Account ID: ${accountInfo.accountId}`);
         console.log(`Balance: ${Number(accountInfo.balanceCNS) / 1e6} USD stable`);
         console.log(`Locked: ${Number(accountInfo.lockedBalanceCNS) / 1e6} USD stable`);
         console.log(
@@ -244,11 +85,10 @@ export function registerManageCommand(program: Command): void {
         for (const [name, perpId] of Object.entries(PERPETUALS)) {
           const { position, markPrice } = await exchange.getPosition(
             perpId,
-            accountId
+            accountInfo.accountId
           );
 
           if (position.lotLNS > 0n) {
-            // Fetch perpetual info to get correct decimals for this market
             const perpInfo = await exchange.getPerpetualInfo(perpId);
             const priceDecimals = Number(perpInfo.priceDecimals);
             const lotDecimals = Number(perpInfo.lotDecimals);
@@ -256,7 +96,7 @@ export function registerManageCommand(program: Command): void {
             const size = lnsToLot(position.lotLNS, BigInt(lotDecimals));
             const entryPrice = pnsToPrice(position.pricePNS, BigInt(priceDecimals));
             const currentPrice = pnsToPrice(markPrice, BigInt(priceDecimals));
-            const pnl = Number(position.pnlCNS) / 1e6; // collateralDecimals = 6
+            const pnl = Number(position.pnlCNS) / 1e6;
 
             const posType = Number(position.positionType) === 0 ? "LONG" : "SHORT";
 
@@ -275,8 +115,7 @@ export function registerManageCommand(program: Command): void {
           config.chain.collateralToken
         );
 
-        console.log("\n=== Owner Wallet ===");
-        console.log(`Address: ${owner.address}`);
+        console.log("\n=== Wallet Balances ===");
         console.log(`ETH: ${Number(ownerEthBalance) / 1e18}`);
         console.log(`USD stable: ${Number(ownerTokenBalance) / 1e6}`);
       } catch (error) {
@@ -285,35 +124,138 @@ export function registerManageCommand(program: Command): void {
       }
     });
 
-  // Check if address is operator
+  // Deposit collateral
   manage
-    .command("is-operator")
-    .description("Check if an address is an operator")
-    .requiredOption("--address <address>", "Address to check")
+    .command("deposit")
+    .description("Deposit collateral to exchange account (creates if needed)")
+    .requiredOption("--amount <amount>", "Amount to deposit in USD stable")
     .action(async (options) => {
       const config = loadEnvConfig();
+      validateOwnerConfig(config);
 
-      if (!config.delegatedAccountAddress) {
-        console.error("DELEGATED_ACCOUNT_ADDRESS is required");
-        process.exit(1);
-      }
-
-      // Don't need owner key for read-only operation
       const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey ?? "0x0000000000000000000000000000000000000000000000000000000000000001",
+        config.ownerPrivateKey,
         config.chain
       );
 
-      const delegatedAccount = DelegatedAccount.connect(
-        config.delegatedAccountAddress,
-        owner.publicClient
+      const exchange = new Exchange(
+        config.chain.exchangeAddress,
+        owner.publicClient,
+        owner.walletClient
       );
 
+      const amount = parseFloat(options.amount);
+      const amountCNS = BigInt(Math.round(amount * 1e6));
+
+      // Check if account exists
+      let accountExists = false;
+      let accountInfo;
       try {
-        const isOp = await delegatedAccount.isOperator(options.address as Address);
-        console.log(`${options.address} is${isOp ? "" : " NOT"} an operator`);
+        accountInfo = await exchange.getAccountByAddress(owner.address);
+        accountExists = accountInfo.accountId > 0n;
+      } catch {
+        accountExists = false;
+      }
+
+      const account = owner.walletClient.account;
+      if (!account) throw new Error("No account");
+
+      if (!accountExists) {
+        console.log(`Creating exchange account with ${amount} USD stable...`);
+
+        // Approve tokens
+        console.log("Approving tokens...");
+        const approveHash = await owner.walletClient.writeContract({
+          address: config.chain.collateralToken,
+          abi: ERC20Abi,
+          functionName: "approve",
+          args: [config.chain.exchangeAddress, amountCNS],
+          account,
+          chain: owner.walletClient.chain,
+        });
+        console.log(`Approve tx: ${approveHash}`);
+        await owner.publicClient.waitForTransactionReceipt({ hash: approveHash });
+
+        // Create account
+        console.log("Creating account...");
+        const createHash = await owner.walletClient.writeContract({
+          address: config.chain.exchangeAddress,
+          abi: ExchangeAbi,
+          functionName: "createAccount",
+          args: [amountCNS],
+          account,
+          chain: owner.walletClient.chain,
+        });
+        console.log(`Create account tx: ${createHash}`);
+
+        // Get new account ID
+        await owner.publicClient.waitForTransactionReceipt({ hash: createHash });
+        const newAccountInfo = await exchange.getAccountByAddress(owner.address);
+        console.log(`Account created with ID: ${newAccountInfo.accountId}`);
+      } else {
+        console.log(`Depositing ${amount} USD stable to account ${accountInfo!.accountId}...`);
+
+        // Approve tokens
+        console.log("Approving tokens...");
+        const approveHash = await owner.walletClient.writeContract({
+          address: config.chain.collateralToken,
+          abi: ERC20Abi,
+          functionName: "approve",
+          args: [config.chain.exchangeAddress, amountCNS],
+          account,
+          chain: owner.walletClient.chain,
+        });
+        console.log(`Approve tx: ${approveHash}`);
+        await owner.publicClient.waitForTransactionReceipt({ hash: approveHash });
+
+        // Deposit
+        console.log("Depositing...");
+        const depositHash = await owner.walletClient.writeContract({
+          address: config.chain.exchangeAddress,
+          abi: ExchangeAbi,
+          functionName: "depositCollateral",
+          args: [amountCNS],
+          account,
+          chain: owner.walletClient.chain,
+        });
+        console.log(`Deposit tx: ${depositHash}`);
+      }
+    });
+
+  // Withdraw collateral
+  manage
+    .command("withdraw")
+    .description("Withdraw collateral from exchange account")
+    .requiredOption("--amount <amount>", "Amount to withdraw in USD stable")
+    .action(async (options) => {
+      const config = loadEnvConfig();
+      validateOwnerConfig(config);
+
+      const owner = OwnerWallet.fromPrivateKey(
+        config.ownerPrivateKey,
+        config.chain
+      );
+
+      const account = owner.walletClient.account;
+      if (!account) throw new Error("No account");
+
+      const amount = parseFloat(options.amount);
+      const amountCNS = BigInt(Math.round(amount * 1e6));
+
+      console.log(`Withdrawing ${amount} USD stable...`);
+
+      try {
+        const txHash = await owner.walletClient.writeContract({
+          address: config.chain.exchangeAddress,
+          abi: ExchangeAbi,
+          functionName: "withdrawCollateral",
+          args: [amountCNS],
+          account,
+          chain: owner.walletClient.chain,
+        });
+        console.log(`Transaction submitted: ${txHash}`);
       } catch (error) {
-        console.error("Check failed:", error);
+        console.error("Withdrawal failed:", error);
         process.exit(1);
       }
     });
@@ -354,10 +296,8 @@ export function registerManageCommand(program: Command): void {
           const markPrice = pnsToPrice(info.markPNS, BigInt(priceDecimals));
           const oraclePrice = pnsToPrice(info.oraclePNS, BigInt(priceDecimals));
 
-          // Funding rate is in pct per 100k, convert to percentage
           const fundingRate = info.fundingRatePct100k / 100000;
 
-          // Open interest
           const longOI = lnsToLot(info.longOpenInterestLNS, BigInt(lotDecimals));
           const shortOI = lnsToLot(info.shortOpenInterestLNS, BigInt(lotDecimals));
 
@@ -380,7 +320,6 @@ export function registerManageCommand(program: Command): void {
         return;
       }
 
-      // Print header
       console.log("=== Available Markets ===\n");
       console.log(
         "Symbol".padEnd(8) +

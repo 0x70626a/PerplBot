@@ -49,15 +49,21 @@ export function parsePosition(
   lotDecimals: bigint = LOT_DECIMALS
 ): PositionData {
   let positionTypeStr: "long" | "short" | "none";
-  switch (position.positionType) {
-    case PositionType.Long:
-      positionTypeStr = "long";
-      break;
-    case PositionType.Short:
-      positionTypeStr = "short";
-      break;
-    default:
-      positionTypeStr = "none";
+
+  // Empty position (no size)
+  if (position.lotLNS === 0n) {
+    positionTypeStr = "none";
+  } else {
+    switch (position.positionType) {
+      case PositionType.Long:
+        positionTypeStr = "long";
+        break;
+      case PositionType.Short:
+        positionTypeStr = "short";
+        break;
+      default:
+        positionTypeStr = "none";
+    }
   }
 
   return {
@@ -82,7 +88,7 @@ export function calculateUnrealizedPnL(
   priceDecimals: bigint = PRICE_DECIMALS,
   lotDecimals: bigint = LOT_DECIMALS
 ): number {
-  if (position.positionType === PositionType.None) {
+  if (position.lotLNS === 0n) {
     return 0;
   }
 
@@ -109,7 +115,7 @@ export function calculateLiquidationPrice(
   priceDecimals: bigint = PRICE_DECIMALS,
   lotDecimals: bigint = LOT_DECIMALS
 ): number {
-  if (position.positionType === PositionType.None) {
+  if (position.lotLNS === 0n) {
     return 0;
   }
 
@@ -144,7 +150,7 @@ export function calculateEffectiveLeverage(
   priceDecimals: bigint = PRICE_DECIMALS,
   lotDecimals: bigint = LOT_DECIMALS
 ): number {
-  if (position.positionType === PositionType.None) {
+  if (position.lotLNS === 0n) {
     return 0;
   }
 

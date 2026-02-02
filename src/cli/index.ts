@@ -9,7 +9,7 @@ import { registerDeployCommand } from "./deploy.js";
 import { registerTradeCommand } from "./trade.js";
 import { registerManageCommand } from "./manage.js";
 import { registerShowCommand } from "./show.js";
-import { registerDirectCommand } from "./direct.js";
+import { registerDelegateCommand } from "./delegate.js";
 
 const program = new Command();
 
@@ -23,7 +23,7 @@ registerDeployCommand(program);
 registerTradeCommand(program);
 registerManageCommand(program);
 registerShowCommand(program);
-registerDirectCommand(program);
+registerDelegateCommand(program);
 
 // Parse and execute
 program.parse();

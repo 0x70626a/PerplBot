@@ -3,10 +3,9 @@
  */
 
 import type { Command } from "commander";
-import { parseAbiItem } from "viem";
+import { createPublicClient, http, parseAbiItem } from "viem";
 import {
   loadEnvConfig,
-  OperatorWallet,
   PERPETUALS,
   pnsToPrice,
   lnsToLot,
@@ -55,10 +54,10 @@ export function registerShowCommand(program: Command): void {
     .action(async (options) => {
       const config = loadEnvConfig();
 
-      const operator = OperatorWallet.fromPrivateKey(
-        config.operatorPrivateKey,
-        config.chain
-      );
+      const publicClient = createPublicClient({
+        chain: config.chain.chain,
+        transport: http(config.chain.rpcUrl),
+      });
 
       const perpId = resolvePerpId(options.perp);
       const depth = parseInt(options.depth, 10);
@@ -68,7 +67,7 @@ export function registerShowCommand(program: Command): void {
 
       // Get perpetual info for decimals
       const exchange = config.chain.exchangeAddress;
-      const perpInfo = await operator.publicClient.readContract({
+      const perpInfo = await publicClient.readContract({
         address: exchange,
         abi: [{
           type: "function",
@@ -120,7 +119,7 @@ export function registerShowCommand(program: Command): void {
       const markPrice = pnsToPrice(perpInfo.markPNS, priceDecimals);
 
       // Scan recent blocks for orders (limited to reduce RPC calls)
-      const currentBlock = await operator.publicClient.getBlockNumber();
+      const currentBlock = await publicClient.getBlockNumber();
       const blocksToScan = 1000n;
       const startBlock = currentBlock - blocksToScan;
 
@@ -150,25 +149,25 @@ export function registerShowCommand(program: Command): void {
         const toBlock = fromBlock + BATCH_SIZE - 1n > currentBlock ? currentBlock : fromBlock + BATCH_SIZE - 1n;
 
         const [reqBatch, placedBatch, cancelBatch, fillBatch] = await Promise.all([
-          operator.publicClient.getLogs({
+          publicClient.getLogs({
             address: exchange,
             event: orderRequestEvent,
             fromBlock,
             toBlock,
           }),
-          operator.publicClient.getLogs({
+          publicClient.getLogs({
             address: exchange,
             event: orderPlacedEvent,
             fromBlock,
             toBlock,
           }),
-          operator.publicClient.getLogs({
+          publicClient.getLogs({
             address: exchange,
             event: orderCancelledEvent,
             fromBlock,
             toBlock,
           }),
-          operator.publicClient.getLogs({
+          publicClient.getLogs({
             address: exchange,
             event: makerFilledEvent,
             fromBlock,
@@ -273,10 +272,10 @@ export function registerShowCommand(program: Command): void {
     .action(async (options) => {
       const config = loadEnvConfig();
 
-      const operator = OperatorWallet.fromPrivateKey(
-        config.operatorPrivateKey,
-        config.chain
-      );
+      const publicClient = createPublicClient({
+        chain: config.chain.chain,
+        transport: http(config.chain.rpcUrl),
+      });
 
       const perpId = resolvePerpId(options.perp);
       const limit = parseInt(options.limit, 10);
@@ -286,7 +285,7 @@ export function registerShowCommand(program: Command): void {
 
       // Get perpetual info for decimals
       const exchange = config.chain.exchangeAddress;
-      const perpInfo = await operator.publicClient.readContract({
+      const perpInfo = await publicClient.readContract({
         address: exchange,
         abi: [{
           type: "function",
@@ -337,7 +336,7 @@ export function registerShowCommand(program: Command): void {
       const lotDecimals = BigInt(perpInfo.lotDecimals);
 
       // Scan recent blocks for fills (limited to reduce RPC calls)
-      const currentBlock = await operator.publicClient.getBlockNumber();
+      const currentBlock = await publicClient.getBlockNumber();
       const blocksToScan = 2000n;
       const startBlock = currentBlock - blocksToScan;
 
@@ -353,7 +352,7 @@ export function registerShowCommand(program: Command): void {
       for (let fromBlock = startBlock; fromBlock < currentBlock; fromBlock += BATCH_SIZE) {
         const toBlock = fromBlock + BATCH_SIZE - 1n > currentBlock ? currentBlock : fromBlock + BATCH_SIZE - 1n;
 
-        const fillBatch = await operator.publicClient.getLogs({
+        const fillBatch = await publicClient.getLogs({
           address: exchange,
           event: makerFilledEvent,
           fromBlock,
