@@ -12,6 +12,9 @@ import {
   ExchangeStateTracker,
   DelegatedAccount,
   PERPETUALS,
+  ALL_PERP_IDS,
+  pnsToPrice,
+  lnsToLot,
 } from "../sdk/index.js";
 
 export function registerManageCommand(program: Command): void {
@@ -308,5 +311,95 @@ export function registerManageCommand(program: Command): void {
         console.error("Check failed:", error);
         process.exit(1);
       }
+    });
+
+  // Show available markets
+  manage
+    .command("markets")
+    .description("Show available markets with prices and funding rates")
+    .action(async () => {
+      const { createPublicClient, http } = await import("viem");
+      const config = loadEnvConfig();
+
+      const publicClient = createPublicClient({
+        chain: config.chain.chain,
+        transport: http(config.chain.rpcUrl),
+      });
+
+      const exchange = new Exchange(config.chain.exchangeAddress, publicClient);
+
+      console.log("Fetching market data...\n");
+
+      const markets: Array<{
+        symbol: string;
+        markPrice: string;
+        oraclePrice: string;
+        funding: string;
+        longOI: string;
+        shortOI: string;
+        status: string;
+      }> = [];
+
+      for (const perpId of ALL_PERP_IDS) {
+        try {
+          const info = await exchange.getPerpetualInfo(perpId);
+          const priceDecimals = Number(info.priceDecimals);
+          const lotDecimals = Number(info.lotDecimals);
+
+          const markPrice = pnsToPrice(info.markPNS, BigInt(priceDecimals));
+          const oraclePrice = pnsToPrice(info.oraclePNS, BigInt(priceDecimals));
+
+          // Funding rate is in pct per 100k, convert to percentage
+          const fundingRate = info.fundingRatePct100k / 100000;
+
+          // Open interest
+          const longOI = lnsToLot(info.longOpenInterestLNS, BigInt(lotDecimals));
+          const shortOI = lnsToLot(info.shortOpenInterestLNS, BigInt(lotDecimals));
+
+          markets.push({
+            symbol: info.symbol,
+            markPrice: markPrice > 0 ? `$${markPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A",
+            oraclePrice: oraclePrice > 0 ? `$${oraclePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A",
+            funding: `${fundingRate >= 0 ? "+" : ""}${(fundingRate * 100).toFixed(4)}%`,
+            longOI: longOI.toFixed(lotDecimals > 4 ? 4 : lotDecimals),
+            shortOI: shortOI.toFixed(lotDecimals > 4 ? 4 : lotDecimals),
+            status: info.paused ? "PAUSED" : "Active",
+          });
+        } catch {
+          // Market doesn't exist or error fetching
+        }
+      }
+
+      if (markets.length === 0) {
+        console.log("No markets found.");
+        return;
+      }
+
+      // Print header
+      console.log("=== Available Markets ===\n");
+      console.log(
+        "Symbol".padEnd(8) +
+        "Mark Price".padEnd(14) +
+        "Oracle Price".padEnd(14) +
+        "Funding/8h".padEnd(12) +
+        "Long OI".padEnd(12) +
+        "Short OI".padEnd(12) +
+        "Status"
+      );
+      console.log("-".repeat(80));
+
+      for (const m of markets) {
+        console.log(
+          m.symbol.padEnd(8) +
+          m.markPrice.padEnd(14) +
+          m.oraclePrice.padEnd(14) +
+          m.funding.padEnd(12) +
+          m.longOI.padEnd(12) +
+          m.shortOI.padEnd(12) +
+          m.status
+        );
+      }
+
+      console.log("\nFunding rate is per 8-hour period.");
     });
 }
