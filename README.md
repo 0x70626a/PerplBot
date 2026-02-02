@@ -32,6 +32,11 @@ PerplBot provides a TypeScript SDK and CLI for building trading bots on Perpl. I
 - Grid trading strategy
 - Market making with position-based skew
 
+## Prerequisites
+
+- **Node.js 18+** — for running the SDK and CLI
+- **Foundry** (optional) — for deploying contracts. Install from [book.getfoundry.sh](https://book.getfoundry.sh/getting-started/installation)
+
 ## Installation
 
 ```bash
@@ -124,21 +129,52 @@ DELEGATED_ACCOUNT_ADDRESS=
 
 #### Step 4: Deploy DelegatedAccount
 
-Deploy your trading account with an initial deposit:
+**Option A: One-command deployment (Recommended)**
+
+Deploy everything in one command (requires [Foundry](https://book.getfoundry.sh/getting-started/installation)):
 
 ```bash
-npm run dev -- deploy --operator <YOUR_OPERATOR_ADDRESS> --deposit 100
+npm run deploy:all -- 100
 ```
 
 This will:
-1. Deploy a new DelegatedAccount contract
-2. Register your operator wallet
-3. Deposit 100 USDC as trading collateral
+1. Deploy the DelegatedAccount implementation contract
+2. Deploy a proxy pointing to the implementation
+3. Register your operator wallet
+4. Deposit 100 USDC as trading collateral
 
-After deployment, add the contract address to your `.env`:
+**Option B: Step-by-step deployment**
+
+First, deploy the implementation contract:
+
+```bash
+npm run deploy:implementation
+```
+
+This outputs an implementation address. Then deploy your proxy:
+
+```bash
+npm run dev -- deploy \
+  --implementation <IMPLEMENTATION_ADDRESS> \
+  --operator <YOUR_OPERATOR_ADDRESS> \
+  --deposit 100
+```
+
+**Option C: Use existing implementation**
+
+If an implementation is already deployed on the network, you can skip to deploying the proxy:
+
+```bash
+npm run dev -- deploy \
+  --implementation 0x<EXISTING_IMPL_ADDRESS> \
+  --operator <YOUR_OPERATOR_ADDRESS> \
+  --deposit 100
+```
+
+After deployment, add the proxy contract address to your `.env`:
 
 ```env
-DELEGATED_ACCOUNT_ADDRESS=0x...deployed_address...
+DELEGATED_ACCOUNT_ADDRESS=0x...deployed_proxy_address...
 ```
 
 #### Step 5: Start Trading
@@ -247,6 +283,19 @@ OWNER_PRIVATE_KEY=your_owner_key
 OPERATOR_PRIVATE_KEY=your_operator_key
 DELEGATED_ACCOUNT_ADDRESS=your_deployed_address
 ```
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run setup` | Full setup: install deps + generate wallets |
+| `npm run generate-wallets` | Generate owner and operator wallets |
+| `npm run deploy:implementation` | Deploy DelegatedAccount implementation (requires Foundry) |
+| `npm run deploy:all -- <deposit>` | Deploy implementation + proxy in one command |
+| `npm run dev -- <cmd>` | Run CLI commands in development mode |
+| `npm run build` | Build TypeScript to dist/ |
+| `npm run typecheck` | Type check without emitting |
+| `npm test` | Run all tests |
 
 ## Development
 
