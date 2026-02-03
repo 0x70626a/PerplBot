@@ -218,6 +218,7 @@ describe("parseTrade", () => {
         market: "btc",
         side: "long",
         size: 0.01,
+        sizeIsUsd: false,
         price: 78000,
         leverage: 5,
         options: { ioc: false, postOnly: false },

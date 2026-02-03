@@ -9,9 +9,9 @@ import { handleStatus } from "./status.js";
 import { handleMarkets } from "./markets.js";
 import { showTradeConfirmation } from "./trade.js";
 import { handleOrderBook, handleRecentTrades } from "./show.js";
-import { handleCancelOrder, handleCancelAll } from "./cancel.js";
+import { handleCancelOrder, handleCancelAll, handleOpenOrders } from "./cancel.js";
 import { handleClosePosition, handleCloseAll } from "./close.js";
-import { formatError } from "../formatters/telegram.js";
+import { formatError, formatHelp } from "../formatters/telegram.js";
 
 /**
  * Handle natural language messages
@@ -25,14 +25,19 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // Skip if it looks like a command
   if (text.startsWith("/")) return;
 
+  console.log(`[MSG] "${text}"`);
+
   const result = parseCommand(text);
 
   if (!result.success) {
     // If parsing failed, send error message
     const errorMsg = result.error || "Could not understand that command";
+    console.log(`[FAIL] ${errorMsg}`);
     await ctx.reply(formatError(errorMsg), { parse_mode: "MarkdownV2" });
     return;
   }
+
+  console.log(`[OK] type=${result.parsed?.type || "trade"}, command=${result.command}`);
 
   // Route based on command type
   if (result.parsed) {
@@ -95,6 +100,16 @@ export async function handleMessage(ctx: Context): Promise<void> {
 
       case "close-all":
         await handleCloseAll(ctx, result.parsed.market);
+        break;
+
+      case "orders":
+        if (result.parsed.market) {
+          await handleOpenOrders(ctx, result.parsed.market);
+        }
+        break;
+
+      case "help":
+        await ctx.reply(formatHelp(), { parse_mode: "MarkdownV2" });
         break;
 
       case "trade":

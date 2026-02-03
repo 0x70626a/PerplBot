@@ -10,6 +10,7 @@ export interface ParsedTrade {
   market: Market;
   side: "long" | "short";
   size: number;
+  sizeIsUsd?: boolean; // true if size is in USD (e.g., "$100 of btc")
   price: number | "market";
   leverage?: number;
   options: {
@@ -19,7 +20,7 @@ export interface ParsedTrade {
 }
 
 export interface ParsedCommand {
-  type: "trade" | "status" | "markets" | "book" | "trades" | "deposit" | "withdraw" | "cancel" | "cancel-all" | "close-position" | "close-all";
+  type: "trade" | "status" | "markets" | "book" | "trades" | "deposit" | "withdraw" | "cancel" | "cancel-all" | "close-position" | "close-all" | "orders" | "help";
   trade?: ParsedTrade;
   market?: Market;
   amount?: number;
@@ -51,7 +52,7 @@ const MARKET_ALIASES: Record<string, Market> = {
 const LONG_KEYWORDS = ["long", "buy", "go long", "enter long"];
 const SHORT_KEYWORDS = ["short", "sell", "go short", "enter short"];
 const CLOSE_KEYWORDS = ["close", "exit", "close out", "flatten"];
-const MARKET_ORDER_KEYWORDS = ["at market", "market order", "market price", "immediately"];
+const MARKET_ORDER_KEYWORDS = ["at market", "market order", "market price", "immediately", "market long", "market short", "market buy", "market sell"];
 const POST_ONLY_KEYWORDS = ["maker only", "post only", "post-only", "maker"];
 
 // Command detection keywords
@@ -68,6 +69,10 @@ const CANCEL_SINGLE_PATTERN = /cancel.*(?:order|#)\s*(\d+)|cancel.*(\d+)/i;
 const CLOSE_ALL_KEYWORDS = ["close all", "close-all", "close everything", "flatten all", "exit all", "liquidate all"];
 // Close position on specific market
 const CLOSE_POSITION_KEYWORDS = ["close position", "close my position", "flatten position", "exit position"];
+// View open orders
+const ORDERS_KEYWORDS = ["my orders", "open orders", "show orders", "list orders", "orders"];
+// Help
+const HELP_KEYWORDS = ["help", "commands", "what can you do", "how to use"];
 
 /**
  * Find a market in the input text
@@ -90,6 +95,16 @@ export function parseCommand(input: string): ParseResult {
 
   if (!text) {
     return { success: false, error: "Empty input" };
+  }
+
+  // Check for help command
+  if (HELP_KEYWORDS.some((k) => text.includes(k))) {
+    return {
+      success: true,
+      parsed: { type: "help" },
+      command: "help",
+      description: "Show available commands",
+    };
   }
 
   // Check for status/account commands
@@ -137,6 +152,20 @@ export function parseCommand(input: string): ParseResult {
       parsed: { type: "trades", market },
       command: `show trades --perp ${market}`,
       description: `Show recent ${market.toUpperCase()} trades`,
+    };
+  }
+
+  // Check for open orders command
+  if (ORDERS_KEYWORDS.some((k) => text.includes(k)) && !text.includes("cancel")) {
+    const market = findMarket(text);
+    if (!market) {
+      return { success: false, error: "Please specify a market (btc, eth, sol, mon, zec)" };
+    }
+    return {
+      success: true,
+      parsed: { type: "orders", market },
+      command: `show orders --perp ${market}`,
+      description: `Show open ${market.toUpperCase()} orders`,
     };
   }
 
@@ -279,30 +308,63 @@ export function parseTrade(input: string): ParseResult {
     }
     trade.market = foundMarket;
 
-    // Extract size - look for number followed by market name or standalone decimal
-    const sizePatterns = [
-      // "0.01 btc", "1 eth", "100 sol"
-      new RegExp(`(\\d+\\.?\\d*)\\s*(?:${Object.keys(MARKET_ALIASES).join("|")})`, "i"),
-      // "size 0.01", "size: 0.01"
-      /size[:\s]+(\d+\.?\d*)/i,
-      // standalone number before "at" (e.g., "long 0.01 at 78000")
-      /(?:long|short|buy|sell)\s+(\d+\.?\d*)\s+(?:at|@)/i,
-      // standalone number after side keyword
-      /(?:long|short|buy|sell)\s+(\d+\.?\d*)/i,
-    ];
-
+    // First check for USD amounts ("$100", "100 usd", "100 dollars")
+    // But NOT "$X" that appears after "at" or "@" (those are prices)
+    let sizeIsUsd = false;
     let size: number | undefined;
-    for (const pattern of sizePatterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
+
+    // Check for "100 usd" or "100 dollars" first (unambiguous)
+    const usdSuffixMatch = text.match(/(\d+\.?\d*)\s*(?:usd|dollars?)\b/i);
+    if (usdSuffixMatch) {
+      size = parseFloat(usdSuffixMatch[1]);
+      sizeIsUsd = true;
+    }
+
+    // Check for "$X" that is NOT a price (not preceded by "at" or "@")
+    if (!size) {
+      const dollarMatches = text.matchAll(/\$\s*(\d+\.?\d*)/gi);
+      for (const match of dollarMatches) {
+        const dollarIndex = match.index!;
+        const beforeDollar = text.substring(Math.max(0, dollarIndex - 5), dollarIndex).trim();
+        // Skip if preceded by "at" or "@" (it's a price, not a size)
+        if (beforeDollar.endsWith("at") || beforeDollar.endsWith("@")) {
+          continue;
+        }
         size = parseFloat(match[1]);
+        sizeIsUsd = true;
         break;
       }
     }
+
+    // If no USD amount, look for size in native units
+    if (!size) {
+      const sizePatterns = [
+        // "0.01 btc", "1 eth", "100 sol"
+        new RegExp(`(\\d+\\.?\\d*)\\s*(?:${Object.keys(MARKET_ALIASES).join("|")})`, "i"),
+        // "for 0.01", "for 0.01 btc" (e.g., "long btc for 0.01")
+        /\bfor\s+(\d+\.?\d*)/i,
+        // "size 0.01", "size: 0.01"
+        /size[:\s]+(\d+\.?\d*)/i,
+        // standalone number before "at" (e.g., "long 0.01 at 78000")
+        /(?:long|short|buy|sell)\s+(\d+\.?\d*)\s+(?:at|@)/i,
+        // standalone number after side keyword
+        /(?:long|short|buy|sell)\s+(\d+\.?\d*)/i,
+      ];
+
+      for (const pattern of sizePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          size = parseFloat(match[1]);
+          break;
+        }
+      }
+    }
+
     if (!size || isNaN(size) || size <= 0) {
       return { success: false, error: "Could not determine trade size" };
     }
     trade.size = size;
+    trade.sizeIsUsd = sizeIsUsd;
 
     // Extract price - look for "at $X", "@ X", "price X"
     const isMarketOrder = MARKET_ORDER_KEYWORDS.some((k) => text.includes(k));
@@ -312,8 +374,8 @@ export function parseTrade(input: string): ParseResult {
       trade.options!.ioc = true;
     } else {
       const pricePatterns = [
-        // "at $78000", "at 78000", "@ 78000"
-        /(?:at|@)\s*\$?(\d+\.?\d*)/i,
+        // "at $78000", "at 78000", "@ 78000" - but NOT "at 3x" (leverage)
+        /(?:at|@)\s*\$?(\d+\.?\d*)(?!x)/i,
         // "price 78000", "price: 78000"
         /price[:\s]+\$?(\d+\.?\d*)/i,
       ];
@@ -322,7 +384,12 @@ export function parseTrade(input: string): ParseResult {
       for (const pattern of pricePatterns) {
         const match = text.match(pattern);
         if (match && match[1]) {
-          price = parseFloat(match[1]);
+          const potentialPrice = parseFloat(match[1]);
+          // Skip if this looks like leverage (small number followed by x)
+          if (potentialPrice < 100 && text.includes(`${match[1]}x`)) {
+            continue;
+          }
+          price = potentialPrice;
           break;
         }
       }

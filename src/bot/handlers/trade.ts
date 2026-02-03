@@ -62,15 +62,25 @@ export async function showTradeConfirmation(
   const chatId = ctx.chat?.id;
   if (!chatId) return;
 
-  // If market order, fetch current price
+  const perpId = PERP_NAMES[trade.market];
+  if (perpId === undefined) {
+    await ctx.reply(formatError(`Unknown market: ${trade.market}`), { parse_mode: "MarkdownV2" });
+    return;
+  }
+
+  // Get market price for USD conversion or market orders
+  const marketPrice = await getMarketPrice(perpId);
+
+  // If size is in USD, convert to native units
+  if (trade.sizeIsUsd) {
+    const sizeInNative = trade.size / marketPrice;
+    trade = { ...trade, size: sizeInNative, sizeIsUsd: false };
+  }
+
+  // If market order, set price with slippage buffer
   if (trade.price === "market") {
-    const perpId = PERP_NAMES[trade.market];
-    if (perpId !== undefined) {
-      const marketPrice = await getMarketPrice(perpId);
-      // For market orders, use a price with slippage buffer
-      const slippage = trade.side === "long" ? 1.005 : 0.995;
-      trade = { ...trade, price: marketPrice * slippage };
-    }
+    const slippage = trade.side === "long" ? 1.005 : 0.995;
+    trade = { ...trade, price: marketPrice * slippage };
   }
 
   // Store pending trade

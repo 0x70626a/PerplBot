@@ -405,11 +405,13 @@ Just send a message:
 - "markets" or "prices"
 - "btc order book" or "eth book"
 - "btc trades" or "recent eth trades"
+- "my btc orders" — view open orders
 
 **Trading (with confirmation)**
 - "long 0.01 btc at 78000 5x"
 - "short 0.1 eth at 3000"
 - "buy 1 sol at market"
+- "long btc $100 at market 3x" — USD amounts supported
 
 **Order Management**
 - "cancel btc order 123"

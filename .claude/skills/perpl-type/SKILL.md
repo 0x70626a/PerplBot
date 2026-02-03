@@ -1,6 +1,7 @@
 ---
 name: perpl-type
 description: Natural language Perpl commands - trades, queries, and account management
+user-invocable: true
 model: haiku
 allowed-tools: Bash(npm run dev:*), AskUserQuestion
 argument-hint: <describe what you want to do>
@@ -35,6 +36,8 @@ Convert natural language into PerplBot CLI commands.
 | "btc order book" | `show book --perp btc` |
 | "show eth depth" | `show book --perp eth` |
 | "recent btc trades" | `show trades --perp btc` |
+| "my btc orders" | `show orders --perp btc` |
+| "open eth orders" | `show orders --perp eth` |
 
 ### Account Management
 | Input | Command |
@@ -53,7 +56,10 @@ Convert natural language into PerplBot CLI commands.
 |-------|---------|
 | "long 0.01 btc at 78000 5x" | `trade open --perp btc --side long ...` |
 | "short 1 eth at market 10x" | `trade open --perp eth --side short ... --ioc` |
+| "long btc $100 at market 3x" | `trade open` (USD converted to size) |
 | "close my btc long 0.01 at 80000" | `trade close --perp btc --side long ...` |
+| "close position btc" | Close entire position at market |
+| "close all" | Cancel all orders + close all positions |
 
 ## Execution Flow
 
