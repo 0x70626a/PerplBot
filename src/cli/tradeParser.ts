@@ -19,7 +19,7 @@ export interface ParsedTrade {
 }
 
 export interface ParsedCommand {
-  type: "trade" | "status" | "markets" | "book" | "trades" | "deposit" | "withdraw" | "cancel" | "cancel-all";
+  type: "trade" | "status" | "markets" | "book" | "trades" | "deposit" | "withdraw" | "cancel" | "cancel-all" | "close-position" | "close-all";
   trade?: ParsedTrade;
   market?: Market;
   amount?: number;
@@ -61,9 +61,13 @@ const BOOK_KEYWORDS = ["order book", "orderbook", "book", "depth", "bids", "asks
 const TRADES_KEYWORDS = ["recent trades", "trades", "trade history", "last trades"];
 const DEPOSIT_KEYWORDS = ["deposit"];
 const WITHDRAW_KEYWORDS = ["withdraw", "withdrawal"];
-const CANCEL_ALL_KEYWORDS = ["cancel all", "cancel-all", "close all orders"];
+const CANCEL_ALL_KEYWORDS = ["cancel all", "cancel-all"];
 // Single order cancel - just needs "cancel" and an order ID (but not "cancel all")
 const CANCEL_SINGLE_PATTERN = /cancel.*(?:order|#)\s*(\d+)|cancel.*(\d+)/i;
+// Close all positions and orders - nuclear option
+const CLOSE_ALL_KEYWORDS = ["close all", "close-all", "close everything", "flatten all", "exit all", "liquidate all"];
+// Close position on specific market
+const CLOSE_POSITION_KEYWORDS = ["close position", "close my position", "flatten position", "exit position"];
 
 /**
  * Find a market in the input text
@@ -163,6 +167,34 @@ export function parseCommand(input: string): ParseResult {
       parsed: { type: "withdraw", amount },
       command: `manage withdraw --amount ${amount}`,
       description: `Withdraw ${amount} USD`,
+    };
+  }
+
+  // Check for close all command (closes all positions and cancels all orders across all markets)
+  if (CLOSE_ALL_KEYWORDS.some((k) => text.includes(k))) {
+    const market = findMarket(text);
+    // If market specified, close just that market; otherwise close everything
+    return {
+      success: true,
+      parsed: { type: "close-all", market },
+      command: market ? `close-all --perp ${market}` : "close-all",
+      description: market
+        ? `Close all ${market.toUpperCase()} positions and cancel orders`
+        : "Close all positions and cancel all orders",
+    };
+  }
+
+  // Check for close position command (close position on specific market)
+  if (CLOSE_POSITION_KEYWORDS.some((k) => text.includes(k))) {
+    const market = findMarket(text);
+    if (!market) {
+      return { success: false, error: "Please specify a market (btc, eth, sol, mon, zec)" };
+    }
+    return {
+      success: true,
+      parsed: { type: "close-position", market },
+      command: `close-position --perp ${market}`,
+      description: `Close ${market.toUpperCase()} position`,
     };
   }
 
