@@ -257,6 +257,10 @@ export function parseCommand(input: string): ParseResult {
         description: `Cancel ${market.toUpperCase()} order #${orderId}`,
       };
     }
+    // "cancel" without order ID - give helpful error
+    if (text.includes("order")) {
+      return { success: false, error: "Please specify an order ID (e.g., 'cancel btc order 123')" };
+    }
   }
 
   // If no query command matched, try to parse as a trade
