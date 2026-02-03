@@ -508,6 +508,44 @@ describe("parseTrade", () => {
       expect(result.success).toBe(true);
     });
   });
+
+  describe("USD Amounts", () => {
+    it("parses $100 before market name", () => {
+      const result = parseTrade("long $100 btc at market 3x");
+      expect(result.success).toBe(true);
+      expect(result.trade?.size).toBe(100);
+      expect(result.trade?.sizeIsUsd).toBe(true);
+    });
+
+    it("parses $100 after market name", () => {
+      const result = parseTrade("long btc $100 at market 3x");
+      expect(result.success).toBe(true);
+      expect(result.trade?.size).toBe(100);
+      expect(result.trade?.sizeIsUsd).toBe(true);
+    });
+
+    it("does not confuse price with USD amount", () => {
+      const result = parseTrade("long 0.01 btc at $78000");
+      expect(result.success).toBe(true);
+      expect(result.trade?.size).toBe(0.01);
+      expect(result.trade?.sizeIsUsd).toBe(false);
+      expect(result.trade?.price).toBe(78000);
+    });
+
+    it("parses 100 usd", () => {
+      const result = parseTrade("long 100 usd btc at market");
+      expect(result.success).toBe(true);
+      expect(result.trade?.size).toBe(100);
+      expect(result.trade?.sizeIsUsd).toBe(true);
+    });
+
+    it("parses 100 dollars", () => {
+      const result = parseTrade("long 100 dollars of btc at market");
+      expect(result.success).toBe(true);
+      expect(result.trade?.size).toBe(100);
+      expect(result.trade?.sizeIsUsd).toBe(true);
+    });
+  });
 });
 
 describe("buildCommand", () => {
