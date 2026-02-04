@@ -3,7 +3,7 @@
  * Catches all non-command messages and routes through parseCommand()
  */
 
-import type { Context } from "telegraf";
+import type { BotContext } from "../types.js";
 import { parseCommand } from "../../cli/tradeParser.js";
 import { handleStatus } from "./status.js";
 import { handleMarkets } from "./markets.js";
@@ -16,7 +16,7 @@ import { formatError, formatHelp } from "../formatters/telegram.js";
 /**
  * Handle natural language messages
  */
-export async function handleMessage(ctx: Context): Promise<void> {
+export async function handleMessage(ctx: BotContext): Promise<void> {
   const message = ctx.message;
   if (!message || !("text" in message)) return;
 

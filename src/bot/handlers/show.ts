@@ -2,7 +2,7 @@
  * Show handlers - Order book and recent trades
  */
 
-import type { Context } from "telegraf";
+import type { BotContext } from "../types.js";
 import { createPublicClient, http, parseAbiItem } from "viem";
 import {
   loadEnvConfig,
@@ -228,7 +228,7 @@ export async function fetchOrderBook(market: Market): Promise<OrderBookData> {
 /**
  * Handle order book request
  */
-export async function handleOrderBook(ctx: Context, market: Market): Promise<void> {
+export async function handleOrderBook(ctx: BotContext, market: Market): Promise<void> {
   try {
     await ctx.reply(`Fetching ${market.toUpperCase()} order book...`);
 
@@ -359,7 +359,7 @@ export async function fetchRecentTrades(market: Market, limit = 20): Promise<{
 /**
  * Handle recent trades request
  */
-export async function handleRecentTrades(ctx: Context, market: Market): Promise<void> {
+export async function handleRecentTrades(ctx: BotContext, market: Market): Promise<void> {
   try {
     await ctx.reply(`Fetching recent ${market.toUpperCase()} trades...`);
 

@@ -140,3 +140,125 @@ export function clearAuth(): void {
   isAuthenticated = false;
   console.log("[API] Auth cleared");
 }
+
+// ============================================
+// Multi-User Mode Functions
+// ============================================
+
+import type { User } from "./db/schema.js";
+import type { Address } from "viem";
+
+/**
+ * Create a HybridClient for a specific user's DelegatedAccount
+ * Uses the bot's operator wallet to execute trades on the user's behalf
+ */
+export async function createHybridClientForUser(user: User): Promise<HybridClient> {
+  if (!user.delegatedAccount) {
+    throw new Error("User does not have a DelegatedAccount set");
+  }
+
+  const config = loadEnvConfig();
+
+  // Get bot operator private key
+  const operatorKey = process.env.BOT_OPERATOR_PRIVATE_KEY;
+  if (!operatorKey) {
+    throw new Error("BOT_OPERATOR_PRIVATE_KEY not configured");
+  }
+
+  const operatorPrivateKey = operatorKey.startsWith("0x")
+    ? (operatorKey as `0x${string}`)
+    : (`0x${operatorKey}` as `0x${string}`);
+
+  // Create public client
+  const publicClient = createPublicClient({
+    chain: config.chain.chain,
+    transport: http(config.chain.rpcUrl),
+  });
+
+  // Create wallet client with bot operator account
+  const account = privateKeyToAccount(operatorPrivateKey);
+  const walletClient = createWalletClient({
+    account,
+    chain: config.chain.chain,
+    transport: http(config.chain.rpcUrl),
+  });
+
+  // Get API client (authentication is per-wallet, so don't authenticate for user)
+  let apiClientForUser: PerplApiClient | undefined;
+  if (USE_API) {
+    // Note: API auth is wallet-specific, so for user queries we may need
+    // to authenticate with the user's wallet or skip API for certain calls
+    apiClientForUser = getApiClient();
+    // We don't authenticate here - the API client may already be authenticated
+    // with the owner wallet, or user-specific queries may need different auth
+  }
+
+  // Create Exchange with DelegatedAccount as the "from" address
+  // When writing through the Exchange, transactions go to the DelegatedAccount
+  // which then forwards them to the Exchange contract
+  const exchange = new Exchange(
+    config.chain.exchangeAddress,
+    publicClient,
+    walletClient,
+    user.delegatedAccount as Address
+  );
+
+  // Wrap in HybridClient
+  const hybrid = new HybridClient({
+    exchange,
+    apiClient: apiClientForUser,
+  });
+
+  console.log(`[HybridClient] Created for user ${user.telegramId}`);
+  console.log(`[HybridClient]   DelegatedAccount: ${user.delegatedAccount}`);
+  console.log(`[HybridClient]   Operator: ${account.address}`);
+
+  return hybrid;
+}
+
+/**
+ * Verify that the bot operator is authorized on a DelegatedAccount
+ */
+export async function verifyOperatorStatus(
+  delegatedAccountAddress: string
+): Promise<boolean> {
+  const operatorKey = process.env.BOT_OPERATOR_PRIVATE_KEY;
+  if (!operatorKey) {
+    return false;
+  }
+
+  const operatorPrivateKey = operatorKey.startsWith("0x")
+    ? (operatorKey as `0x${string}`)
+    : (`0x${operatorKey}` as `0x${string}`);
+
+  const operatorAccount = privateKeyToAccount(operatorPrivateKey);
+  const config = loadEnvConfig();
+
+  const publicClient = createPublicClient({
+    chain: config.chain.chain,
+    transport: http(config.chain.rpcUrl),
+  });
+
+  try {
+    // Read the DelegatedAccount contract to check if bot is an operator
+    const isOperator = await publicClient.readContract({
+      address: delegatedAccountAddress as Address,
+      abi: [
+        {
+          name: "isOperator",
+          type: "function",
+          stateMutability: "view",
+          inputs: [{ name: "operator", type: "address" }],
+          outputs: [{ name: "", type: "bool" }],
+        },
+      ],
+      functionName: "isOperator",
+      args: [operatorAccount.address],
+    });
+
+    return isOperator as boolean;
+  } catch (error) {
+    console.error(`[verifyOperatorStatus] Error checking operator status:`, error);
+    return false;
+  }
+}

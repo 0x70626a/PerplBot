@@ -2,7 +2,7 @@
  * Cancel handlers - Cancel single order or all orders
  */
 
-import type { Context } from "telegraf";
+import type { BotContext } from "../types.js";
 import {
   loadEnvConfig,
   validateOwnerConfig,
@@ -76,7 +76,7 @@ export async function fetchOpenOrders(market: Market): Promise<OpenOrder[]> {
 /**
  * Handle showing open orders
  */
-export async function handleOpenOrders(ctx: Context, market: Market): Promise<void> {
+export async function handleOpenOrders(ctx: BotContext, market: Market): Promise<void> {
   try {
     await ctx.reply(`Fetching ${market.toUpperCase()} open orders...`);
 
@@ -132,7 +132,7 @@ export async function cancelOrder(
  * Handle cancel single order
  */
 export async function handleCancelOrder(
-  ctx: Context,
+  ctx: BotContext,
   market: Market,
   orderId: string
 ): Promise<void> {
@@ -216,7 +216,7 @@ export async function cancelAllOrders(market: Market): Promise<{
 /**
  * Handle cancel all orders
  */
-export async function handleCancelAll(ctx: Context, market: Market): Promise<void> {
+export async function handleCancelAll(ctx: BotContext, market: Market): Promise<void> {
   try {
     await ctx.reply(`Cancelling all ${market.toUpperCase()} orders...`);
 

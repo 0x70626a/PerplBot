@@ -17,7 +17,7 @@ npm run build
 # Run CLI in development
 npm run dev -- <command>
 
-# Run tests (297 tests)
+# Run tests (332 tests)
 npm test
 
 # Run tests in watch mode
@@ -29,6 +29,26 @@ npm run test:watch
 PerplBot is a TypeScript SDK and CLI for building trading bots on Perpl. It implements the **owner/operator wallet pattern** using the `delegated-account` smart contract, allowing secure separation between cold storage (owner) and hot trading wallets (operator).
 
 **Key security feature**: Operators can NEVER withdraw funds - this is enforced at the smart contract level.
+
+## Bot Modes
+
+### Single-User Mode (Legacy)
+Set `TELEGRAM_USER_ID` to restrict bot to one user. Uses `OWNER_PRIVATE_KEY` for all operations.
+
+### Multi-User Mode
+Set `MULTI_USER_MODE=true` to enable multi-user support:
+- Users link wallets via `/link` and signature verification
+- Users set their DelegatedAccount via `/setaccount`
+- Bot operator key (`BOT_OPERATOR_PRIVATE_KEY`) must be added as operator on each user's DelegatedAccount
+- Bot can trade on behalf of users but CANNOT withdraw (enforced by smart contract)
+
+**Environment Variables for Multi-User:**
+```bash
+MULTI_USER_MODE=true
+BOT_OPERATOR_PRIVATE_KEY=0x...  # Bot's operator wallet (added to users' accounts)
+DATABASE_PATH=./data/perplbot.db  # SQLite database for user storage
+IMPLEMENTATION_ADDRESS=0x...  # Optional: DelegatedAccount implementation address (for /deploy)
+```
 
 ## Project Structure
 
@@ -241,6 +261,7 @@ with the pattern
 - Ask yourself: "Would a staff engineer approve this?"
 - Run tests, check logs, demonstrate correctness
 - For new features: run BOTH unit tests AND integration tests (actually execute the commands)
+- **Always write a test plan** for non-trivial features (save to `tasks/<feature>-test-plan.md`)
 
 ### 5. Demand Elegance (Balanced)
 - For non-trivial changes: pause and ask "is there a more elegant way?"
@@ -306,7 +327,7 @@ The `/reviewer` skill performs comprehensive code review with a senior engineer 
 
 **Verification Gate:**
 - `npm run typecheck` passes
-- `npm test` passes (297 tests)
+- `npm test` passes (332 tests)
 - No P0 or P1 issues remain
 - "Would a staff engineer approve this?"
 

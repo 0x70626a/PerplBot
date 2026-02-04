@@ -6,24 +6,49 @@
 import "dotenv/config";
 import { Telegraf } from "telegraf";
 import { loadBotConfig, authMiddleware } from "./config.js";
+import {
+  multiUserAuthMiddleware,
+  rateLimitMiddleware,
+} from "./middleware/auth.js";
 import { handleStatus } from "./handlers/status.js";
 import { handleMarkets } from "./handlers/markets.js";
 import { handleTradeConfirm, handleTradeCancel } from "./handlers/trade.js";
 import { handleMessage } from "./handlers/message.js";
+import { handleLink, handleVerify } from "./handlers/link.js";
+import { handleSetAccount, handleWhoami, handleUnlink } from "./handlers/account.js";
+import { handleDeploy, handleContracts } from "./handlers/deploy.js";
 import { formatWelcome, formatHelp } from "./formatters/telegram.js";
+import { initDatabase, cleanupExpiredRequests } from "./db/index.js";
+import type { BotContext } from "./types.js";
 
 async function main() {
   console.log("Starting PerplBot...");
 
   // Load configuration
   const config = loadBotConfig();
-  console.log(`Authorized user ID: ${config.allowedUserId}`);
 
-  // Initialize bot
-  const bot = new Telegraf(config.token);
+  // Initialize database if in multi-user mode
+  if (config.multiUser) {
+    console.log("[BOT] Initializing database...");
+    initDatabase();
+    const cleaned = cleanupExpiredRequests();
+    if (cleaned > 0) {
+      console.log(`[BOT] Cleaned up ${cleaned} expired link requests`);
+    }
+  }
 
-  // Add auth middleware - rejects messages from unauthorized users
-  bot.use(authMiddleware(config.allowedUserId));
+  // Initialize bot with extended context
+  const bot = new Telegraf<BotContext>(config.token);
+
+  // Add auth middleware based on mode
+  if (config.multiUser) {
+    console.log("[BOT] Multi-user mode");
+    bot.use(rateLimitMiddleware());
+    bot.use(multiUserAuthMiddleware());
+  } else if (config.allowedUserId) {
+    console.log(`[BOT] Single-user mode, authorized user: ${config.allowedUserId}`);
+    bot.use(authMiddleware(config.allowedUserId));
+  }
 
   // Register command handlers
   bot.command("start", async (ctx) => {
@@ -34,6 +59,20 @@ async function main() {
     await ctx.reply(formatHelp(), { parse_mode: "MarkdownV2" });
   });
 
+  // Multi-user commands (wallet linking)
+  bot.command("link", handleLink);
+  bot.command("verify", handleVerify);
+
+  // Account management commands
+  bot.command("setaccount", handleSetAccount);
+  bot.command("whoami", handleWhoami);
+  bot.command("unlink", handleUnlink);
+
+  // Deployment commands
+  bot.command("deploy", handleDeploy);
+  bot.command("contracts", handleContracts);
+
+  // Trading commands
   bot.command("status", handleStatus);
   bot.command("markets", handleMarkets);
 

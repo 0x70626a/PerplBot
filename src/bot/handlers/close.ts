@@ -4,7 +4,7 @@
  * "close all" - cancels all orders and closes all positions
  */
 
-import type { Context } from "telegraf";
+import type { BotContext } from "../types.js";
 import {
   loadEnvConfig,
   validateOwnerConfig,
@@ -119,7 +119,7 @@ async function closePosition(market: Market): Promise<{
 /**
  * Handle close position request
  */
-export async function handleClosePosition(ctx: Context, market: Market): Promise<void> {
+export async function handleClosePosition(ctx: BotContext, market: Market): Promise<void> {
   try {
     await ctx.reply(`Closing ${market.toUpperCase()} position...`);
 
@@ -256,7 +256,7 @@ async function closeAll(specificMarket?: Market): Promise<{
 /**
  * Handle close all request
  */
-export async function handleCloseAll(ctx: Context, market?: Market): Promise<void> {
+export async function handleCloseAll(ctx: BotContext, market?: Market): Promise<void> {
   try {
     const scope = market ? `${market.toUpperCase()}` : "all markets";
     await ctx.reply(`Closing everything on ${scope}...`);

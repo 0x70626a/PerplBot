@@ -3,7 +3,7 @@
  * Shows available markets with prices and funding rates
  */
 
-import type { Context } from "telegraf";
+import type { BotContext } from "../types.js";
 import {
   ALL_PERP_IDS,
   pnsToPrice,
@@ -57,7 +57,7 @@ export async function fetchMarketData(): Promise<MarketData[]> {
 /**
  * Handle /markets command
  */
-export async function handleMarkets(ctx: Context): Promise<void> {
+export async function handleMarkets(ctx: BotContext): Promise<void> {
   try {
     await ctx.reply("Fetching market data...");
 
