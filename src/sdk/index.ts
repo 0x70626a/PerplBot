@@ -3,6 +3,9 @@
  * TypeScript SDK for automated trading on Perpl (perpetual DEX on Monad)
  */
 
+// API client (REST + WebSocket)
+export * from "./api/index.js";
+
 // Contracts
 export * from "./contracts/index.js";
 

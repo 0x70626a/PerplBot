@@ -1,8 +1,10 @@
 /**
  * Exchange state tracking
  * Caches and updates exchange state for efficient access
+ * Supports real-time WebSocket updates with contract fallback
  */
 
+import { EventEmitter } from "events";
 import type { Address, PublicClient } from "viem";
 import {
   Exchange,
@@ -11,6 +13,8 @@ import {
   type PerpetualInfo,
 } from "../contracts/Exchange.js";
 import { getPositionSummary, type PositionSummary } from "../trading/positions.js";
+import type { PerplWebSocketClient } from "../api/websocket.js";
+import type { Position, Order, WalletAccount } from "../api/types.js";
 
 /**
  * Known perpetual IDs from dex-sdk testnet config
@@ -48,17 +52,46 @@ export interface ExchangeState {
 }
 
 /**
+ * Real-time state from WebSocket
+ */
+export interface RealtimeState {
+  /** Wallet accounts from WebSocket */
+  walletAccounts: WalletAccount[];
+  /** Open positions from WebSocket (API format) */
+  apiPositions: Map<number, Position>;
+  /** Open orders from WebSocket (API format) */
+  apiOrders: Map<number, Order>;
+  /** WebSocket connected */
+  connected: boolean;
+  /** Last WebSocket update */
+  lastWsUpdate: number;
+}
+
+export interface StateTrackerEvents {
+  "positions-updated": [positions: Map<number, Position>];
+  "orders-updated": [orders: Map<number, Order>];
+  "wallet-updated": [accounts: WalletAccount[]];
+  "realtime-connected": [];
+  "realtime-disconnected": [code: number];
+  "auth-expired": [];
+}
+
+/**
  * Exchange state tracker
  * Maintains cached state and provides convenient access methods
+ * Supports real-time WebSocket updates with contract fallback
  */
-export class ExchangeStateTracker {
+export class ExchangeStateTracker extends EventEmitter {
   private exchange: Exchange;
   private accountId?: bigint;
   private accountAddress?: Address;
   private state: ExchangeState;
+  private realtimeState: RealtimeState;
   private publicClient: PublicClient;
+  private wsClient?: PerplWebSocketClient;
 
   constructor(exchange: Exchange, publicClient: PublicClient) {
+    super();
     this.exchange = exchange;
     this.publicClient = publicClient;
     this.state = {
@@ -66,6 +99,124 @@ export class ExchangeStateTracker {
       perpetuals: new Map(),
       lastUpdate: 0,
     };
+    this.realtimeState = {
+      walletAccounts: [],
+      apiPositions: new Map(),
+      apiOrders: new Map(),
+      connected: false,
+      lastWsUpdate: 0,
+    };
+  }
+
+  /**
+   * Connect to WebSocket for real-time updates
+   * @param wsClient WebSocket client instance
+   * @param authNonce Auth nonce from REST authentication
+   * @param authCookies Auth cookies from REST authentication
+   */
+  async connectRealtime(
+    wsClient: PerplWebSocketClient,
+    authNonce: string,
+    authCookies?: string
+  ): Promise<void> {
+    this.wsClient = wsClient;
+
+    // Set up event handlers before connecting
+    wsClient.on("wallet", (accounts: WalletAccount[]) => {
+      this.realtimeState.walletAccounts = accounts;
+      this.realtimeState.lastWsUpdate = Date.now();
+      this.emit("wallet-updated", accounts);
+    });
+
+    wsClient.on("positions", (positions: Position[]) => {
+      for (const pos of positions) {
+        if (pos.st === 1) {
+          // Open position
+          this.realtimeState.apiPositions.set(pos.pid, pos);
+        } else {
+          // Closed/liquidated - remove from map
+          this.realtimeState.apiPositions.delete(pos.pid);
+        }
+      }
+      this.realtimeState.lastWsUpdate = Date.now();
+      this.emit("positions-updated", this.realtimeState.apiPositions);
+    });
+
+    wsClient.on("orders", (orders: Order[]) => {
+      for (const order of orders) {
+        if (order.r) {
+          // Remove flag set
+          this.realtimeState.apiOrders.delete(order.oid);
+        } else if (order.st === 2 || order.st === 3) {
+          // Open or PartiallyFilled
+          this.realtimeState.apiOrders.set(order.oid, order);
+        } else {
+          // Filled, Cancelled, Rejected, Expired
+          this.realtimeState.apiOrders.delete(order.oid);
+        }
+      }
+      this.realtimeState.lastWsUpdate = Date.now();
+      this.emit("orders-updated", this.realtimeState.apiOrders);
+    });
+
+    wsClient.on("disconnect", (code: number) => {
+      this.realtimeState.connected = false;
+      this.emit("realtime-disconnected", code);
+    });
+
+    wsClient.on("auth-expired", () => {
+      this.realtimeState.connected = false;
+      this.emit("auth-expired");
+    });
+
+    // Connect
+    await wsClient.connectTrading(authNonce, authCookies);
+    this.realtimeState.connected = true;
+    this.emit("realtime-connected");
+  }
+
+  /**
+   * Disconnect WebSocket
+   */
+  disconnectRealtime(): void {
+    this.wsClient?.disconnect();
+    this.wsClient = undefined;
+    this.realtimeState.connected = false;
+  }
+
+  /**
+   * Check if real-time updates are connected
+   */
+  isRealtimeConnected(): boolean {
+    return this.realtimeState.connected;
+  }
+
+  /**
+   * Get open positions from real-time state
+   */
+  getRealtimePositions(): Map<number, Position> {
+    return this.realtimeState.apiPositions;
+  }
+
+  /**
+   * Get open orders from real-time state
+   */
+  getRealtimeOrders(): Map<number, Order> {
+    return this.realtimeState.apiOrders;
+  }
+
+  /**
+   * Get wallet accounts from real-time state
+   */
+  getRealtimeWalletAccounts(): WalletAccount[] {
+    return this.realtimeState.walletAccounts;
+  }
+
+  /**
+   * Get real-time state age in milliseconds
+   */
+  getRealtimeStateAge(): number {
+    return Date.now() - this.realtimeState.lastWsUpdate;
   }
 
   /**
@@ -279,4 +430,24 @@ export class ExchangeStateTracker {
   isStale(maxAgeMs: number = 30000): boolean {
     return this.getStateAge() > maxAgeMs;
   }
+}
+
+// Type-safe event emitter overrides
+export interface ExchangeStateTracker {
+  on<E extends keyof StateTrackerEvents>(
+    event: E,
+    listener: (...args: StateTrackerEvents[E]) => void
+  ): this;
+  once<E extends keyof StateTrackerEvents>(
+    event: E,
+    listener: (...args: StateTrackerEvents[E]) => void
+  ): this;
+  off<E extends keyof StateTrackerEvents>(
+    event: E,
+    listener: (...args: StateTrackerEvents[E]) => void
+  ): this;
+  emit<E extends keyof StateTrackerEvents>(
+    event: E,
+    ...args: StateTrackerEvents[E]
+  ): boolean;
 }

@@ -16,7 +16,8 @@ const program = new Command();
 program
   .name("perplbot")
   .description("AI agent toolkit for automated trading on Perpl (perpetual DEX on Monad)")
-  .version("0.1.0");
+  .version("0.1.0")
+  .option("--no-api", "Disable API mode, use contract calls only");
 
 // Register commands
 registerDeployCommand(program);

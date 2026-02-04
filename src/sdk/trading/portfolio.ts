@@ -1,6 +1,7 @@
 /**
  * Portfolio management and queries
  * Get positions, open orders, history, and market information
+ * Supports API batch queries with contract fallback
  */
 
 import type { Address, PublicClient } from "viem";
@@ -14,6 +15,9 @@ import {
 import { ExchangeAbi } from "../contracts/abi.js";
 import { pnsToPrice, lnsToLot, PRICE_DECIMALS, LOT_DECIMALS } from "./orders.js";
 import { cnsToAmount, COLLATERAL_DECIMALS } from "./positions.js";
+import type { PerplApiClient } from "../api/client.js";
+import type { Position, Order, Fill } from "../api/types.js";
+import { USE_API } from "../config.js";
 
 /**
  * Market information for display
@@ -89,21 +93,34 @@ export interface AccountSummary {
 
 /**
  * Portfolio class for querying account and market state
+ * Supports API batch queries with contract fallback
  */
 export class Portfolio {
   private exchange: Exchange;
   private publicClient: PublicClient;
   private exchangeAddress: Address;
   private accountId?: bigint;
+  private apiClient?: PerplApiClient;
+  private useApi: boolean;
 
   constructor(
     exchange: Exchange,
     publicClient: PublicClient,
-    exchangeAddress: Address
+    exchangeAddress: Address,
+    apiClient?: PerplApiClient
   ) {
     this.exchange = exchange;
     this.publicClient = publicClient;
     this.exchangeAddress = exchangeAddress;
+    this.apiClient = apiClient;
+    this.useApi = USE_API && !!apiClient;
+  }
+
+  /**
+   * Check if API mode is enabled
+   */
+  isApiEnabled(): boolean {
+    return this.useApi;
   }
 
   /**
@@ -184,8 +201,89 @@ export class Portfolio {
 
   /**
    * Get all positions for the account
+   * Uses API batch query if available, falls back to contract calls
    */
   async getPositions(perpIds: bigint[] = [0n, 1n, 2n]): Promise<PositionDisplay[]> {
+    // Try API first if available and authenticated
+    if (this.useApi && this.apiClient?.isAuthenticated()) {
+      try {
+        return await this.getPositionsFromApi();
+      } catch (err) {
+        console.warn("[Portfolio] API getPositions failed, using contract:", err);
+      }
+    }
+
+    // Contract fallback
+    return this.getPositionsFromContract(perpIds);
+  }
+
+  /**
+   * Get positions from API (batch query)
+   * @internal
+   */
+  private async getPositionsFromApi(): Promise<PositionDisplay[]> {
+    if (!this.apiClient) throw new Error("API client not available");
+
+    const response = await this.apiClient.getPositionHistory();
+    const positions: PositionDisplay[] = [];
+
+    // Filter for open positions (status 1 = Open)
+    const openPositions = response.d.filter((p) => p.st === 1);
+
+    for (const pos of openPositions) {
+      // Get perpetual info for formatting
+      try {
+        const perpInfo = await this.exchange.getPerpetualInfo(BigInt(pos.mkt));
+        const priceDecimals = perpInfo.priceDecimals;
+        const lotDecimals = perpInfo.lotDecimals;
+
+        const size = pos.s / Math.pow(10, Number(lotDecimals));
+        const entryPrice = pos.ep / Math.pow(10, Number(priceDecimals));
+        const margin = Number(pos.c) / 1e6; // Collateral is in CNS (6 decimals)
+
+        // Get current mark price from contract for accurate PnL
+        const { markPrice: markPricePNS } = await this.exchange.getPosition(
+          BigInt(pos.mkt),
+          BigInt(pos.acc)
+        );
+        const markPrice = pnsToPrice(markPricePNS, priceDecimals);
+
+        // Calculate unrealized PnL
+        const notional = entryPrice * size;
+        const currentNotional = markPrice * size;
+        const isLong = pos.sd === 1; // PositionSide.Long = 1
+        const unrealizedPnl = isLong
+          ? currentNotional - notional
+          : notional - currentNotional;
+
+        const unrealizedPnlPercent = margin > 0 ? (unrealizedPnl / margin) * 100 : 0;
+        const leverage = margin > 0 ? notional / margin : 0;
+
+        positions.push({
+          perpId: BigInt(pos.mkt),
+          symbol: perpInfo.symbol,
+          side: isLong ? "long" : "short",
+          size,
+          entryPrice,
+          markPrice,
+          unrealizedPnl,
+          unrealizedPnlPercent,
+          margin,
+          leverage,
+        });
+      } catch {
+        // Skip positions we can't process
+      }
+    }
+
+    return positions;
+  }
+
+  /**
+   * Get positions from contract (N+1 queries)
+   * @internal
+   */
+  private async getPositionsFromContract(perpIds: bigint[]): Promise<PositionDisplay[]> {
     const accountId = this.ensureAccountId();
     const positions: PositionDisplay[] = [];
 
@@ -359,5 +457,80 @@ export class Portfolio {
       takerFeePercent: Number(takerFee) / 1000, // Convert from per 100k to percent
       makerFeePercent: Number(makerFee) / 1000,
     };
+  }
+
+  // ============ API History Queries ============
+
+  /**
+   * Get order history from API
+   * Requires API client and authentication
+   */
+  async getOrderHistory(maxPages = 10): Promise<Order[]> {
+    if (!this.apiClient?.isAuthenticated()) {
+      throw new Error("API client required and must be authenticated for order history");
+    }
+    return this.apiClient.getAllOrderHistory(maxPages);
+  }
+
+  /**
+   * Get fill history from API
+   * Requires API client and authentication
+   */
+  async getFills(maxPages = 10): Promise<Fill[]> {
+    if (!this.apiClient?.isAuthenticated()) {
+      throw new Error("API client required and must be authenticated for fills");
+    }
+    return this.apiClient.getAllFills(maxPages);
+  }
+
+  /**
+   * Get position history from API
+   * Requires API client and authentication
+   */
+  async getPositionHistory(maxPages = 10): Promise<Position[]> {
+    if (!this.apiClient?.isAuthenticated()) {
+      throw new Error("API client required and must be authenticated for position history");
+    }
+    return this.apiClient.getAllPositionHistory(maxPages);
+  }
+
+  /**
+   * Get open orders for a market (uses Exchange with API fallback)
+   */
+  async getOpenOrders(perpId: bigint): Promise<OpenOrder[]> {
+    const accountId = this.ensureAccountId();
+    const orders = await this.exchange.getOpenOrders(perpId, accountId);
+
+    // Get perpetual info for formatting
+    const perpInfo = await this.exchange.getPerpetualInfo(perpId);
+
+    return orders.map((o) => ({
+      perpId,
+      orderId: o.orderId,
+      symbol: perpInfo.symbol,
+      side: o.orderType === 0 || o.orderType === 2 ? "bid" : "ask", // OpenLong/CloseLong = bid, OpenShort/CloseShort = ask
+      price: o.priceONS / Math.pow(10, Number(perpInfo.priceDecimals)),
+      size: Number(o.lotLNS) / Math.pow(10, Number(perpInfo.lotDecimals)),
+      leverage: o.leverageHdths / 100,
+      expiryBlock: 0n, // Not available in compact response
+    }));
+  }
+
+  /**
+   * Get all open orders across all markets
+   */
+  async getAllOpenOrders(perpIds: bigint[] = [16n, 32n, 48n, 64n, 256n]): Promise<OpenOrder[]> {
+    const allOrders: OpenOrder[] = [];
+
+    for (const perpId of perpIds) {
+      try {
+        const orders = await this.getOpenOrders(perpId);
+        allOrders.push(...orders);
+      } catch {
+        // Market may not exist or no orders
+      }
+    }
+
+    return allOrders;
   }
 }

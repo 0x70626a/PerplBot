@@ -1,5 +1,6 @@
 /**
  * Manage command - Direct account management from owner wallet
+ * Supports API mode for faster queries
  */
 
 import type { Command } from "commander";
@@ -12,6 +13,9 @@ import {
   ALL_PERP_IDS,
   pnsToPrice,
   lnsToLot,
+  PerplApiClient,
+  API_CONFIG,
+  USE_API,
 } from "../sdk/index.js";
 import { ERC20Abi, ExchangeAbi } from "../sdk/contracts/abi.js";
 
@@ -28,18 +32,31 @@ export function registerManageCommand(program: Command): void {
       const config = loadEnvConfig();
       validateOwnerConfig(config);
 
+      // Get global options from parent
+      const globalOpts = program.opts();
+      const useApi = globalOpts.api !== false && USE_API;
+
       const owner = OwnerWallet.fromPrivateKey(
         config.ownerPrivateKey,
         config.chain
       );
 
+      // Initialize API client if enabled
+      let apiClient: PerplApiClient | undefined;
+      if (useApi) {
+        apiClient = new PerplApiClient(API_CONFIG);
+      }
+
       const exchange = new Exchange(
         config.chain.exchangeAddress,
         owner.publicClient,
-        owner.walletClient
+        owner.walletClient,
+        undefined,
+        apiClient
       );
 
-      console.log("Fetching account status...\n");
+      console.log("Fetching account status...");
+      console.log(`Mode: ${useApi ? "API + Contract" : "Contract only"}\n`);
 
       try {
         // Get account by owner address

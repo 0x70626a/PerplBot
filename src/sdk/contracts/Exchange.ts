@@ -11,6 +11,8 @@ import {
   encodeFunctionData,
 } from "viem";
 import { ExchangeAbi } from "./abi.js";
+import type { PerplApiClient } from "../api/client.js";
+import { USE_API } from "../config.js";
 
 /**
  * Order type enum matching contract OrderDescEnum
@@ -118,23 +120,43 @@ export interface PerpetualInfo {
 /**
  * Exchange contract wrapper
  * Can be used directly or through a DelegatedAccount
+ * Supports API-first queries with contract fallback
  */
 export class Exchange {
   public readonly address: Address;
   private readonly publicClient: PublicClient;
   private readonly walletClient?: WalletClient;
   private readonly delegatedAccount?: Address;
+  private readonly apiClient?: PerplApiClient;
+  private readonly useApi: boolean;
 
   constructor(
     address: Address,
     publicClient: PublicClient,
     walletClient?: WalletClient,
-    delegatedAccount?: Address
+    delegatedAccount?: Address,
+    apiClient?: PerplApiClient
   ) {
     this.address = address;
     this.publicClient = publicClient;
     this.walletClient = walletClient;
     this.delegatedAccount = delegatedAccount;
+    this.apiClient = apiClient;
+    this.useApi = USE_API && !!apiClient;
+  }
+
+  /**
+   * Check if API mode is enabled
+   */
+  isApiEnabled(): boolean {
+    return this.useApi;
+  }
+
+  /**
+   * Get the API client (if configured)
+   */
+  getApiClient(): PerplApiClient | undefined {
+    return this.apiClient;
   }
 
   /**
@@ -144,13 +166,15 @@ export class Exchange {
     exchangeAddress: Address,
     delegatedAccountAddress: Address,
     publicClient: PublicClient,
-    walletClient?: WalletClient
+    walletClient?: WalletClient,
+    apiClient?: PerplApiClient
   ): Exchange {
     return new Exchange(
       exchangeAddress,
       publicClient,
       walletClient,
-      delegatedAccountAddress
+      delegatedAccountAddress,
+      apiClient
     );
   }
 
@@ -388,8 +412,51 @@ export class Exchange {
 
   /**
    * Get all open orders for an account on a perpetual
+   * Uses API if available, falls back to contract bitmap iteration
    */
   async getOpenOrders(perpId: bigint, accountId: bigint): Promise<Array<{
+    orderId: bigint;
+    accountId: number;
+    orderType: number;
+    priceONS: number;
+    lotLNS: bigint;
+    leverageHdths: number;
+  }>> {
+    // Try API first if available and authenticated
+    if (this.useApi && this.apiClient?.isAuthenticated()) {
+      try {
+        const orderHistory = await this.apiClient.getOrderHistory();
+        // Filter for open orders (status 2 = Open, 3 = PartiallyFilled) on the specific market
+        const openOrders = orderHistory.d.filter(
+          (o) =>
+            o.mkt === Number(perpId) &&
+            o.acc === Number(accountId) &&
+            (o.st === 2 || o.st === 3) // Open or PartiallyFilled
+        );
+
+        return openOrders.map((o) => ({
+          orderId: BigInt(o.oid),
+          accountId: o.acc,
+          orderType: o.t - 1, // API uses 1-based, contract uses 0-based
+          priceONS: o.p,
+          lotLNS: BigInt(o.os - (o.fs || 0)), // Remaining size
+          leverageHdths: o.lv,
+        }));
+      } catch (err) {
+        // API failed, fall back to contract
+        console.warn("[Exchange] API getOpenOrders failed, using contract:", err);
+      }
+    }
+
+    // Contract fallback: bitmap iteration
+    return this.getOpenOrdersFromContract(perpId, accountId);
+  }
+
+  /**
+   * Get open orders via contract (bitmap iteration)
+   * @internal
+   */
+  private async getOpenOrdersFromContract(perpId: bigint, accountId: bigint): Promise<Array<{
     orderId: bigint;
     accountId: number;
     orderType: number;

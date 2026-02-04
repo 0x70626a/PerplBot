@@ -4,6 +4,7 @@
 
 import { type Address, type Chain, defineChain } from "viem";
 import "dotenv/config";
+import type { ApiConfig } from "./api/types.js";
 
 /**
  * Monad Testnet chain definition
@@ -159,4 +160,32 @@ export function validateOperatorConfig(config: EnvConfig): asserts config is Env
   if (!config.delegatedAccountAddress) {
     throw new Error("DELEGATED_ACCOUNT_ADDRESS is required for operator operations");
   }
+}
+
+// === API Configuration ===
+
+/**
+ * Default API configuration for Perpl testnet
+ */
+export const API_CONFIG: ApiConfig = {
+  baseUrl: process.env.PERPL_API_URL || "https://testnet.perpl.xyz/api",
+  wsUrl: process.env.PERPL_WS_URL || "wss://testnet.perpl.xyz",
+  chainId: 10143,
+};
+
+/**
+ * Feature flag to enable/disable API usage
+ * Set PERPL_USE_API=false to disable API and use contract calls only
+ */
+export const USE_API = process.env.PERPL_USE_API !== "false";
+
+/**
+ * Get API configuration from environment
+ */
+export function getApiConfig(): ApiConfig {
+  return {
+    baseUrl: process.env.PERPL_API_URL || "https://testnet.perpl.xyz/api",
+    wsUrl: process.env.PERPL_WS_URL || "wss://testnet.perpl.xyz",
+    chainId: parseInt(process.env.CHAIN_ID || "10143", 10),
+  };
 }
