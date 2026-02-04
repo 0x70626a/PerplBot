@@ -174,6 +174,7 @@ export async function cancelAllOrders(market: Market): Promise<{
 
   // Get open orders
   const orders = await client.getOpenOrders(perpId, accountInfo.accountId);
+  console.log(`[CANCEL] Found ${orders.length} open orders for ${market}`);
 
   if (orders.length === 0) {
     return { cancelled: 0, total: 0 };
@@ -181,6 +182,7 @@ export async function cancelAllOrders(market: Market): Promise<{
 
   let cancelled = 0;
   for (const order of orders) {
+    console.log(`[CANCEL] Cancelling order ${order.orderId}...`);
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
       perpId,
@@ -199,10 +201,12 @@ export async function cancelAllOrders(market: Market): Promise<{
     };
 
     try {
-      await client.execOrder(orderDesc);
+      const txHash = await client.execOrder(orderDesc);
+      console.log(`[CANCEL] Order ${order.orderId} cancelled: ${txHash}`);
       cancelled++;
-    } catch {
-      // Order may have been filled or cancelled already
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[CANCEL] Failed to cancel order ${order.orderId}: ${errorMsg}`);
     }
   }
 

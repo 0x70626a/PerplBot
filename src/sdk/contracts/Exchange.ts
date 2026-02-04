@@ -412,7 +412,10 @@ export class Exchange {
 
   /**
    * Get all open orders for an account on a perpetual
-   * Uses API if available, falls back to contract bitmap iteration
+   * Always uses contract bitmap iteration because API order IDs are incompatible.
+   *
+   * IMPORTANT: The API returns global/composite order IDs that cannot be used for
+   * contract operations like cancel. The contract expects local bitmap-based IDs.
    */
   async getOpenOrders(perpId: bigint, accountId: bigint): Promise<Array<{
     orderId: bigint;
@@ -422,33 +425,7 @@ export class Exchange {
     lotLNS: bigint;
     leverageHdths: number;
   }>> {
-    // Try API first if available and authenticated
-    if (this.useApi && this.apiClient?.isAuthenticated()) {
-      try {
-        const orderHistory = await this.apiClient.getOrderHistory();
-        // Filter for open orders (status 2 = Open, 3 = PartiallyFilled) on the specific market
-        const openOrders = orderHistory.d.filter(
-          (o) =>
-            o.mkt === Number(perpId) &&
-            o.acc === Number(accountId) &&
-            (o.st === 2 || o.st === 3) // Open or PartiallyFilled
-        );
-
-        return openOrders.map((o) => ({
-          orderId: BigInt(o.oid),
-          accountId: o.acc,
-          orderType: o.t - 1, // API uses 1-based, contract uses 0-based
-          priceONS: o.p,
-          lotLNS: BigInt(o.os - (o.fs || 0)), // Remaining size
-          leverageHdths: o.lv,
-        }));
-      } catch (err) {
-        // API failed, fall back to contract
-        console.warn("[Exchange] API getOpenOrders failed, using contract:", err);
-      }
-    }
-
-    // Contract fallback: bitmap iteration
+    // Always use contract - API order IDs are incompatible with contract operations
     return this.getOpenOrdersFromContract(perpId, accountId);
   }
 

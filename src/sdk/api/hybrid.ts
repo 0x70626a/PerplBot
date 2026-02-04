@@ -137,60 +137,26 @@ export class HybridClient {
 
   /**
    * Get open orders for an account on a perpetual
-   * Tries API order history first, falls back to contract bitmap iteration
+   *
+   * IMPORTANT: Always uses contract because API order IDs don't match contract order IDs.
+   * The API returns global/composite order IDs, but the contract expects local bitmap-based IDs.
+   * Using API order IDs for cancellation would fail with "execution reverted".
    */
   async getOpenOrders(perpId: bigint, accountId: bigint): Promise<HybridOpenOrder[]> {
-    if (this.useApi && this.apiClient?.isAuthenticated()) {
-      try {
-        const orderHistory = await this.withTimeout(this.apiClient.getOrderHistory());
-        // Filter for open orders (status 2 = Open, 3 = PartiallyFilled)
-        const openOrders = orderHistory.d.filter(
-          (o) =>
-            o.mkt === Number(perpId) &&
-            o.acc === Number(accountId) &&
-            (o.st === 2 || o.st === 3)
-        );
-
-        return openOrders.map((o) => ({
-          orderId: BigInt(o.oid),
-          accountId: o.acc,
-          orderType: o.t - 1, // API uses 1-based, contract uses 0-based
-          priceONS: o.p,
-          lotLNS: BigInt(o.os - (o.fs || 0)), // Remaining size
-          leverageHdths: o.lv,
-        }));
-      } catch (error) {
-        this.logFallback("getOpenOrders", error);
-      }
-    }
+    // Always use contract - API order IDs are incompatible with contract cancel operations
     return this.exchange.getOpenOrders(perpId, accountId);
   }
 
   /**
    * Get all open orders across all markets
-   * Uses API if available
+   *
+   * IMPORTANT: API order IDs don't match contract order IDs, so this method
+   * cannot be used for cancellation operations. Use getOpenOrders() per market instead.
    */
-  async getAllOpenOrders(accountId: bigint): Promise<HybridOpenOrder[]> {
-    if (this.useApi && this.apiClient?.isAuthenticated()) {
-      try {
-        const orderHistory = await this.withTimeout(this.apiClient.getOrderHistory());
-        const openOrders = orderHistory.d.filter(
-          (o) => o.acc === Number(accountId) && (o.st === 2 || o.st === 3)
-        );
-
-        return openOrders.map((o) => ({
-          orderId: BigInt(o.oid),
-          accountId: o.acc,
-          orderType: o.t - 1,
-          priceONS: o.p,
-          lotLNS: BigInt(o.os - (o.fs || 0)),
-          leverageHdths: o.lv,
-        }));
-      } catch (error) {
-        this.logFallback("getAllOpenOrders", error);
-      }
-    }
+  async getAllOpenOrders(_accountId: bigint): Promise<HybridOpenOrder[]> {
+    // Cannot use API - order IDs are incompatible with contract operations
     // No efficient contract fallback for all markets - would need to iterate all perps
+    console.warn("[HybridClient] getAllOpenOrders not supported - use getOpenOrders per market");
     return [];
   }
 

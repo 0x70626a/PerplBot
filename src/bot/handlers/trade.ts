@@ -141,9 +141,11 @@ async function executeTrade(trade: ParsedTrade): Promise<{ success: boolean; txH
     };
 
     const txHash = await client.execOrder(orderDesc);
+    console.log(`[TRADE] Success: ${txHash}`);
     return { success: true, txHash };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[TRADE] Error: ${errorMsg}`);
     return { success: false, error: errorMsg };
   }
 }

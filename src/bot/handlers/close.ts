@@ -107,9 +107,11 @@ async function closePosition(market: Market): Promise<{
     };
 
     const txHash = await client.execOrder(orderDesc);
+    console.log(`[CLOSE] Position closed: ${txHash}`);
     return { success: true, txHash };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[CLOSE] Error closing position: ${errorMsg}`);
     return { success: false, error: errorMsg };
   }
 }
@@ -176,9 +178,11 @@ async function closeAll(specificMarket?: Market): Promise<{
     try {
       // Cancel all open orders for this market
       const orders = await client.getOpenOrders(perpId, accountInfo.accountId);
+      console.log(`[CLOSE] Found ${orders.length} open orders for ${perpName}`);
 
       for (const order of orders) {
         try {
+          console.log(`[CLOSE] Cancelling order ${order.orderId} on ${perpName}...`);
           const cancelDesc: OrderDesc = {
             orderDescId: 0n,
             perpId,
@@ -195,9 +199,11 @@ async function closeAll(specificMarket?: Market): Promise<{
             lastExecutionBlock: 0n,
             amountCNS: 0n,
           };
-          await client.execOrder(cancelDesc);
+          const txHash = await client.execOrder(cancelDesc);
+          console.log(`[CLOSE] Order ${order.orderId} cancelled: ${txHash}`);
           ordersCancelled++;
         } catch (e: any) {
+          console.error(`[CLOSE] Failed to cancel order ${order.orderId}: ${e.message}`);
           errors.push(`Failed to cancel ${perpName} order #${order.orderId}: ${e.message}`);
         }
       }
