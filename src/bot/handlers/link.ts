@@ -86,13 +86,15 @@ export async function handleLink(ctx: TextContext): Promise<void> {
 
   // Generate nonce and create link request
   const nonce = generateNonce();
-  const message = formatLinkMessage(telegramId, nonce);
+  const timestamp = new Date().toISOString();
+  const message = formatLinkMessage(telegramId, nonce, timestamp);
   const expiresAt = new Date(Date.now() + LINK_EXPIRY_MS);
 
   createLinkRequest({
     telegramId,
     nonce,
     walletAddress,
+    timestamp,
     expiresAt,
   });
 
@@ -151,8 +153,8 @@ export async function handleVerify(ctx: TextContext): Promise<void> {
     return;
   }
 
-  // Reconstruct the message and verify signature
-  const message = formatLinkMessage(telegramId, request.nonce);
+  // Reconstruct the message and verify signature (using stored timestamp)
+  const message = formatLinkMessage(telegramId, request.nonce, request.timestamp);
   const result = await verifyWalletSignature(
     message,
     signature,

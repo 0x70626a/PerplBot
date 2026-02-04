@@ -51,6 +51,7 @@ export function initDatabase(): Database.Database {
       telegram_id INTEGER PRIMARY KEY,
       nonce TEXT NOT NULL,
       wallet_address TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
       expires_at DATETIME NOT NULL
     );
 
@@ -214,12 +215,13 @@ export function getUserCount(): number {
 export function createLinkRequest(request: LinkRequest): void {
   const db = getDatabase();
   db.prepare(
-    `INSERT OR REPLACE INTO link_requests (telegram_id, nonce, wallet_address, expires_at)
-     VALUES (?, ?, ?, ?)`
+    `INSERT OR REPLACE INTO link_requests (telegram_id, nonce, wallet_address, timestamp, expires_at)
+     VALUES (?, ?, ?, ?, ?)`
   ).run(
     request.telegramId,
     request.nonce,
     request.walletAddress,
+    request.timestamp,
     request.expiresAt.toISOString()
   );
 }
@@ -251,7 +253,7 @@ export function deleteLinkRequest(telegramId: number): void {
 export function cleanupExpiredRequests(): number {
   const db = getDatabase();
   const result = db
-    .prepare("DELETE FROM link_requests WHERE expires_at < datetime(?)")
+    .prepare("DELETE FROM link_requests WHERE expires_at < ?")
     .run(new Date().toISOString());
   return result.changes;
 }

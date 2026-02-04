@@ -15,14 +15,15 @@ export function generateNonce(): string {
 
 /**
  * Format the message to be signed for wallet linking
+ * @param timestamp - ISO timestamp (required for consistent message between sign and verify)
  */
-export function formatLinkMessage(telegramId: number, nonce: string): string {
+export function formatLinkMessage(telegramId: number, nonce: string, timestamp: string): string {
   return [
     "Link wallet to PerplBot",
     "",
     `Telegram ID: ${telegramId}`,
     `Nonce: ${nonce}`,
-    `Timestamp: ${new Date().toISOString()}`,
+    `Timestamp: ${timestamp}`,
     "",
     "This signature proves you own this wallet.",
     "It does not authorize any transactions.",

@@ -21,6 +21,7 @@ export interface LinkRequest {
   telegramId: number;
   nonce: string; // Random nonce for signature verification
   walletAddress: string;
+  timestamp: string; // ISO timestamp for message consistency
   expiresAt: Date;
 }
 
@@ -43,6 +44,7 @@ export interface LinkRequestRow {
   telegram_id: number;
   nonce: string;
   wallet_address: string;
+  timestamp: string;
   expires_at: string;
 }
 
@@ -68,6 +70,7 @@ export function rowToLinkRequest(row: LinkRequestRow): LinkRequest {
     telegramId: row.telegram_id,
     nonce: row.nonce,
     walletAddress: row.wallet_address,
+    timestamp: row.timestamp,
     expiresAt: new Date(row.expires_at),
   };
 }
