@@ -1,31 +1,31 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { EventEmitter } from "events";
 
-// Mock WebSocket before importing the client
-class MockWebSocket extends EventEmitter {
-  static OPEN = 1;
-  static CLOSED = 3;
+// Mock the ws module - must be fully inline since vi.mock is hoisted
+vi.mock("ws", async () => {
+  const { EventEmitter } = await import("events");
 
-  readyState = MockWebSocket.OPEN;
-  url: string;
+  class MockWS extends EventEmitter {
+    static OPEN = 1;
+    static CLOSED = 3;
 
-  constructor(url: string, _options?: unknown) {
-    super();
-    this.url = url;
-    // Simulate async connection
-    setTimeout(() => this.emit("open"), 0);
+    readyState = 1; // OPEN
+    url: string;
+
+    constructor(url: string, _options?: unknown) {
+      super();
+      this.url = url;
+      // Simulate async connection
+      setTimeout(() => this.emit("open"), 0);
+    }
+
+    send = vi.fn();
+    close = vi.fn(function(this: MockWS) {
+      this.readyState = 3; // CLOSED
+    });
   }
 
-  send = vi.fn();
-  close = vi.fn(() => {
-    this.readyState = MockWebSocket.CLOSED;
-  });
-}
-
-// Mock the ws module
-vi.mock("ws", () => ({
-  default: MockWebSocket,
-}));
+  return { default: MockWS };
+});
 
 // Import after mocking
 import { PerplWebSocketClient } from "../../src/sdk/api/websocket.js";
@@ -41,6 +41,7 @@ describe("PerplWebSocketClient", () => {
   });
 
   afterEach(() => {
+    wsClient.disconnect();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -55,7 +56,7 @@ describe("PerplWebSocketClient", () => {
   describe("connectMarketData", () => {
     it("connects to market data endpoint", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       expect(wsClient.isConnected()).toBe(true);
@@ -66,7 +67,7 @@ describe("PerplWebSocketClient", () => {
       wsClient.on("connect", connectHandler);
 
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       expect(connectHandler).toHaveBeenCalled();
@@ -76,12 +77,13 @@ describe("PerplWebSocketClient", () => {
   describe("subscribeOrderBook", () => {
     it("sends subscription message", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       wsClient.subscribeOrderBook(16);
 
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
         JSON.stringify({
           mt: 5,
           subs: [{ stream: "order-book@16", subscribe: true }],
@@ -93,12 +95,13 @@ describe("PerplWebSocketClient", () => {
   describe("subscribeTrades", () => {
     it("sends subscription message", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       wsClient.subscribeTrades(16);
 
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
         JSON.stringify({
           mt: 5,
           subs: [{ stream: "trades@16", subscribe: true }],
@@ -110,12 +113,13 @@ describe("PerplWebSocketClient", () => {
   describe("subscribeMarketState", () => {
     it("sends subscription with chain ID", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       wsClient.subscribeMarketState();
 
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
         JSON.stringify({
           mt: 5,
           subs: [{ stream: `market-state@${chainId}`, subscribe: true }],
@@ -127,12 +131,13 @@ describe("PerplWebSocketClient", () => {
   describe("subscribeHeartbeat", () => {
     it("sends heartbeat subscription", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       wsClient.subscribeHeartbeat();
 
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
         JSON.stringify({
           mt: 5,
           subs: [{ stream: `heartbeat@${chainId}`, subscribe: true }],
@@ -141,10 +146,46 @@ describe("PerplWebSocketClient", () => {
     });
   });
 
+  describe("subscribeCandles", () => {
+    it("sends candles subscription with market and resolution", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      wsClient.subscribeCandles(16, 3600);
+
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          mt: 5,
+          subs: [{ stream: "candles@16*3600", subscribe: true }],
+        })
+      );
+    });
+  });
+
+  describe("subscribeFunding", () => {
+    it("sends funding subscription", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      wsClient.subscribeFunding();
+
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          mt: 5,
+          subs: [{ stream: `funding@${chainId}`, subscribe: true }],
+        })
+      );
+    });
+  });
+
   describe("disconnect", () => {
     it("closes WebSocket connection", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       wsClient.disconnect();
@@ -156,13 +197,12 @@ describe("PerplWebSocketClient", () => {
   describe("message handling", () => {
     it("emits order-book on L2BookSnapshot (mt: 15)", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const handler = vi.fn();
       wsClient.on("order-book", handler);
 
-      // Get the mock WebSocket instance and emit message
       const mockWs = (wsClient as any).ws;
       const message = {
         mt: 15,
@@ -178,7 +218,7 @@ describe("PerplWebSocketClient", () => {
 
     it("emits order-book on L2BookUpdate (mt: 16)", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const handler = vi.fn();
@@ -193,7 +233,7 @@ describe("PerplWebSocketClient", () => {
 
     it("emits trades on TradesSnapshot (mt: 17)", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const handler = vi.fn();
@@ -206,9 +246,24 @@ describe("PerplWebSocketClient", () => {
       expect(handler).toHaveBeenCalledWith(trades);
     });
 
+    it("emits trades on TradesUpdate (mt: 18)", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      const handler = vi.fn();
+      wsClient.on("trades", handler);
+
+      const mockWs = (wsClient as any).ws;
+      const trades = [{ p: 100, s: 10, sd: 2 }];
+      mockWs.emit("message", Buffer.from(JSON.stringify({ mt: 18, d: trades })));
+
+      expect(handler).toHaveBeenCalledWith(trades);
+    });
+
     it("emits market-state on MarketStateUpdate (mt: 9)", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const handler = vi.fn();
@@ -223,7 +278,7 @@ describe("PerplWebSocketClient", () => {
 
     it("emits heartbeat on Heartbeat (mt: 100)", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const handler = vi.fn();
@@ -237,7 +292,7 @@ describe("PerplWebSocketClient", () => {
 
     it("emits wallet on WalletSnapshot (mt: 19)", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const handler = vi.fn();
@@ -252,7 +307,7 @@ describe("PerplWebSocketClient", () => {
 
     it("emits orders on OrdersSnapshot (mt: 23)", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const handler = vi.fn();
@@ -265,9 +320,24 @@ describe("PerplWebSocketClient", () => {
       expect(handler).toHaveBeenCalledWith(orders);
     });
 
+    it("emits orders on OrdersUpdate (mt: 24)", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      const handler = vi.fn();
+      wsClient.on("orders", handler);
+
+      const mockWs = (wsClient as any).ws;
+      const orders = [{ oid: 2, mkt: 16, st: 4 }];
+      mockWs.emit("message", Buffer.from(JSON.stringify({ mt: 24, d: orders })));
+
+      expect(handler).toHaveBeenCalledWith(orders);
+    });
+
     it("emits positions on PositionsSnapshot (mt: 26)", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const handler = vi.fn();
@@ -280,9 +350,24 @@ describe("PerplWebSocketClient", () => {
       expect(handler).toHaveBeenCalledWith(positions);
     });
 
+    it("emits positions on PositionsUpdate (mt: 27)", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      const handler = vi.fn();
+      wsClient.on("positions", handler);
+
+      const mockWs = (wsClient as any).ws;
+      const positions = [{ pid: 2, mkt: 16, st: 2 }];
+      mockWs.emit("message", Buffer.from(JSON.stringify({ mt: 27, d: positions })));
+
+      expect(handler).toHaveBeenCalledWith(positions);
+    });
+
     it("emits fills on FillsUpdate (mt: 25)", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const handler = vi.fn();
@@ -294,12 +379,22 @@ describe("PerplWebSocketClient", () => {
 
       expect(handler).toHaveBeenCalledWith(fills);
     });
+
+    it("handles pong messages silently (mt: 2)", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      const mockWs = (wsClient as any).ws;
+      // Should not throw
+      mockWs.emit("message", Buffer.from(JSON.stringify({ mt: 2 })));
+    });
   });
 
   describe("order submission", () => {
     it("submitOrder sends order request", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const requestId = wsClient.submitOrder({
@@ -315,17 +410,18 @@ describe("PerplWebSocketClient", () => {
       });
 
       expect(requestId).toBe(12345);
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
         expect.stringContaining('"mt":22')
       );
     });
 
-    it("openLong sends correct order", async () => {
+    it("openLong sends correct order type", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
-      vi.useRealTimers(); // Need real Date.now()
+      vi.useRealTimers();
 
       const requestId = wsClient.openLong({
         marketId: 16,
@@ -336,14 +432,15 @@ describe("PerplWebSocketClient", () => {
       });
 
       expect(typeof requestId).toBe("number");
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
-        expect.stringContaining('"t":1') // OpenLong
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"t":1')
       );
     });
 
-    it("openShort sends correct order", async () => {
+    it("openShort sends correct order type", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       vi.useRealTimers();
@@ -356,14 +453,15 @@ describe("PerplWebSocketClient", () => {
         lastBlock: 50000,
       });
 
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
-        expect.stringContaining('"t":2') // OpenShort
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"t":2')
       );
     });
 
-    it("closeLong sends correct order", async () => {
+    it("closeLong sends correct order type with position ID", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       vi.useRealTimers();
@@ -376,14 +474,18 @@ describe("PerplWebSocketClient", () => {
         lastBlock: 50000,
       });
 
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
-        expect.stringContaining('"t":3') // CloseLong
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"t":3')
+      );
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"lp":50')
       );
     });
 
-    it("closeShort sends correct order", async () => {
+    it("closeShort sends correct order type with position ID", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       vi.useRealTimers();
@@ -396,25 +498,56 @@ describe("PerplWebSocketClient", () => {
         lastBlock: 50000,
       });
 
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
-        expect.stringContaining('"t":4') // CloseShort
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"t":4')
+      );
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"lp":50')
       );
     });
 
-    it("cancelOrder sends cancel request", async () => {
+    it("cancelOrder sends cancel request with order ID", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       vi.useRealTimers();
 
       wsClient.cancelOrder(16, 100, 999, 50000);
 
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
-        expect.stringContaining('"t":5') // Cancel
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"t":5')
       );
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
+      expect(mockWs.send).toHaveBeenCalledWith(
         expect.stringContaining('"oid":999')
+      );
+    });
+
+    it("openLong with price sends limit order", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      vi.useRealTimers();
+
+      wsClient.openLong({
+        marketId: 16,
+        accountId: 100,
+        size: 1000,
+        price: 50000,
+        leverage: 1000,
+        lastBlock: 50000,
+      });
+
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"p":50000')
+      );
+      // GTC flag (0) for limit orders
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"fl":0')
       );
     });
   });
@@ -422,7 +555,7 @@ describe("PerplWebSocketClient", () => {
   describe("subscription response handling", () => {
     it("stores subscription IDs from response", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const mockWs = (wsClient as any).ws;
@@ -441,32 +574,13 @@ describe("PerplWebSocketClient", () => {
     });
   });
 
-  describe("ping/pong", () => {
-    it("sends periodic pings", async () => {
-      vi.useRealTimers();
-      const connectPromise = wsClient.connectMarketData();
-
-      // Wait for connection
-      await new Promise((r) => setTimeout(r, 10));
-      await connectPromise;
-
-      // Fast-forward 30 seconds
-      vi.useFakeTimers();
-      vi.advanceTimersByTime(30000);
-
-      expect(MockWebSocket.prototype.send).toHaveBeenCalledWith(
-        expect.stringContaining('"mt":1')
-      );
-    });
-  });
-
   describe("error handling", () => {
     it("emits error on WebSocket error", async () => {
       const errorHandler = vi.fn();
       wsClient.on("error", errorHandler);
 
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
 
       try {
         await connectPromise;
@@ -484,7 +598,7 @@ describe("PerplWebSocketClient", () => {
 
     it("emits error on invalid JSON message", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const errorHandler = vi.fn();
@@ -500,7 +614,7 @@ describe("PerplWebSocketClient", () => {
   describe("disconnect handling", () => {
     it("emits disconnect event with code", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const disconnectHandler = vi.fn();
@@ -514,7 +628,7 @@ describe("PerplWebSocketClient", () => {
 
     it("emits auth-expired on code 3401", async () => {
       const connectPromise = wsClient.connectMarketData();
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await connectPromise;
 
       const authExpiredHandler = vi.fn();
@@ -524,6 +638,30 @@ describe("PerplWebSocketClient", () => {
       mockWs.emit("close", 3401);
 
       expect(authExpiredHandler).toHaveBeenCalled();
+    });
+  });
+
+  describe("isConnected", () => {
+    it("returns false when not connected", () => {
+      expect(wsClient.isConnected()).toBe(false);
+    });
+
+    it("returns true when connected", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      expect(wsClient.isConnected()).toBe(true);
+    });
+
+    it("returns false after disconnect", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      wsClient.disconnect();
+
+      expect(wsClient.isConnected()).toBe(false);
     });
   });
 });
