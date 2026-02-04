@@ -2,7 +2,7 @@
 
 **Source**: `tasks/perpl-api-migration-plan.md` (reviewed & approved)
 **For**: Implementor
-**Status**: Ready to implement
+**Status**: ✅ COMPLETE (2026-02-04)
 
 ---
 
@@ -538,13 +538,13 @@ describe('PerplApiClient', () => {
 ```
 
 **Phase 1 Deliverables**:
-- [ ] `src/sdk/api/types.ts` created
-- [ ] `src/sdk/api/client.ts` created
-- [ ] `src/sdk/api/websocket.ts` created
-- [ ] `src/sdk/api/index.ts` created
-- [ ] `src/sdk/config.ts` updated
-- [ ] `test/api/client.test.ts` created
-- [ ] All tests pass
+- [x] `src/sdk/api/types.ts` created
+- [x] `src/sdk/api/client.ts` created
+- [x] `src/sdk/api/websocket.ts` created
+- [x] `src/sdk/api/index.ts` created
+- [x] `src/sdk/config.ts` updated
+- [x] `test/api/client.test.ts` created
+- [x] All tests pass
 
 ---
 
@@ -595,9 +595,9 @@ export class Exchange {
 ```
 
 **Phase 2 Deliverables**:
-- [ ] Exchange constructor accepts apiClient
-- [ ] Key read methods have API-first + fallback
-- [ ] Existing tests still pass
+- [x] Exchange constructor accepts apiClient
+- [x] Key read methods have API-first + fallback
+- [x] Existing tests still pass
 
 ---
 
@@ -648,9 +648,9 @@ export class ExchangeStateTracker {
 ```
 
 **Phase 3 Deliverables**:
-- [ ] ExchangeStateTracker supports WebSocket
-- [ ] Real-time position/order updates working
-- [ ] Fallback refresh methods preserved
+- [x] ExchangeStateTracker supports WebSocket
+- [x] Real-time position/order updates working
+- [x] Fallback refresh methods preserved
 
 ---
 
@@ -700,9 +700,9 @@ export class Portfolio {
 ```
 
 **Phase 4 Deliverables**:
-- [ ] Portfolio uses batch API endpoints
-- [ ] Contract fallback preserved
-- [ ] Performance improvement measurable
+- [x] Portfolio uses batch API endpoints
+- [x] Contract fallback preserved
+- [x] Performance improvement measurable
 
 ---
 
@@ -761,9 +761,9 @@ export class OperatorWallet {
 ```
 
 **Phase 5 Deliverables**:
-- [ ] OperatorWallet initializes API client
-- [ ] WebSocket order submission working
-- [ ] Contract fallback preserved
+- [x] OperatorWallet initializes API client
+- [x] WebSocket order submission working
+- [x] Contract fallback preserved
 
 ---
 
@@ -807,9 +807,9 @@ console.log(`Mode: ${operator.isApiConnected() ? 'API' : 'Contract'}`);
 ```
 
 **Phase 6 Deliverables**:
-- [ ] `--no-api` flag working
-- [ ] Status shows connection mode
-- [ ] All CLI commands work with both modes
+- [x] `--no-api` flag working
+- [x] Status shows connection mode
+- [x] All CLI commands work with both modes
 
 ---
 
@@ -818,33 +818,34 @@ console.log(`Mode: ${operator.isApiConnected() ? 'API' : 'Contract'}`);
 After each phase:
 - [x] `npm run typecheck` passes
 - [x] `npm test` passes (297 tests)
-- [ ] Manual test: `npm run dev -- manage status`
+- [x] Manual test: `npm run dev -- manage status`
 
 Final verification:
 - [x] All existing tests pass
-- [ ] CLI works with `--no-api` (contract mode)
-- [ ] CLI works without flag (API mode)
-- [ ] WebSocket real-time updates working
-- [ ] Fallback triggers on API failure
+- [x] CLI works with `--no-api` (contract mode)
+- [x] CLI works without flag (API mode)
+- [x] WebSocket real-time updates working
+- [x] Fallback triggers on API failure
 
 ---
 
 ## File Checklist
 
 ### Create
-- [ ] `src/sdk/api/types.ts`
-- [ ] `src/sdk/api/client.ts`
-- [ ] `src/sdk/api/websocket.ts`
-- [ ] `src/sdk/api/index.ts`
-- [ ] `test/api/client.test.ts`
-- [ ] `test/api/websocket.test.ts`
+- [x] `src/sdk/api/types.ts`
+- [x] `src/sdk/api/client.ts`
+- [x] `src/sdk/api/websocket.ts`
+- [x] `src/sdk/api/index.ts`
+- [x] `test/api/client.test.ts`
+- [x] `test/api/websocket.test.ts`
 
 ### Modify
-- [ ] `src/sdk/config.ts`
-- [ ] `src/sdk/contracts/Exchange.ts`
-- [ ] `src/sdk/state/exchange.ts`
-- [ ] `src/sdk/trading/portfolio.ts`
-- [ ] `src/sdk/wallet/operator.ts`
-- [ ] `src/sdk/wallet/owner.ts`
-- [ ] `src/cli/index.ts`
-- [ ] `src/cli/manage.ts`
+- [x] `src/sdk/config.ts`
+- [x] `src/sdk/contracts/Exchange.ts`
+- [x] `src/sdk/state/exchange.ts`
+- [x] `src/sdk/trading/portfolio.ts`
+- [x] `src/sdk/wallet/operator.ts`
+- [x] `src/cli/index.ts`
+- [x] `src/cli/manage.ts`
+
+Note: `src/sdk/wallet/owner.ts` was not modified - API integration is handled via OperatorWallet.
