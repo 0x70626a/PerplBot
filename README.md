@@ -229,12 +229,32 @@ Trade via Telegram with natural language commands.
 
 ### Natural Language Examples
 
+**Account & Markets**
 ```
-status                          # Account info
-markets                         # Prices
-long 0.01 btc at 78000 5x       # Open position (confirms first)
-cancel all btc orders           # Cancel orders
-close all                       # Close everything
+status                          # Account balance and positions
+markets                         # Prices and funding rates
+my btc orders                   # View open orders
+btc order book                  # View orderbook
+```
+
+**Trading (requires confirmation)**
+```
+long 0.01 btc at 78000 5x       # Limit long with leverage
+short 0.1 eth at 3000           # Limit short
+buy 1 sol at market             # Market order
+```
+
+**Order Management**
+```
+cancel btc order 14             # Cancel specific order
+cancel all btc orders           # Cancel all orders on market
+```
+
+**Position Management**
+```
+close position btc              # Close BTC position only
+close all btc                   # Close BTC position + cancel BTC orders
+close all                       # Close ALL positions + cancel ALL orders
 ```
 
 ## Claude Code Integration
