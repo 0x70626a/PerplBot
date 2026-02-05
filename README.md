@@ -183,7 +183,7 @@ import {
   priceToPNS,
   lotToLNS,
   leverageToHdths,
-} from "perplbot";
+} from "perpl";
 
 // Setup
 const config = getChainConfig();

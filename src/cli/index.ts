@@ -14,7 +14,7 @@ import { registerDelegateCommand } from "./delegate.js";
 const program = new Command();
 
 program
-  .name("perplbot")
+  .name("perpl")
   .description("AI agent toolkit for automated trading on Perpl (perpetual DEX on Monad)")
   .version("0.1.0")
   .option("--no-api", "Disable API mode, use contract calls only");

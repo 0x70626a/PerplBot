@@ -6,7 +6,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vites
 import { rmSync, existsSync, mkdirSync } from "fs";
 
 // Test database path
-const TEST_DB_PATH = "./test-data/test-deploy-perplbot.db";
+const TEST_DB_PATH = "./test-data/test-deploy-perpl.db";
 
 // Set environment before importing
 process.env.DATABASE_PATH = TEST_DB_PATH;
@@ -117,7 +117,7 @@ describe("Deploy Handler", () => {
       expect(message).toContain("Your linked wallet");
       expect(message).toContain("Option 1: Web UI");
       expect(message).toContain("Option 2: CLI");
-      expect(message).toContain("npx perplbot deploy");
+      expect(message).toContain("npx perpl deploy");
       expect(message).toContain("/setaccount");
     });
   });

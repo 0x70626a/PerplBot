@@ -75,14 +75,14 @@ export async function handleDeploy(ctx: TextContext): Promise<void> {
 
   if (implAddress) {
     lines.push("OWNER_PRIVATE_KEY=<your_key> \\\\");
-    lines.push("npx perplbot deploy \\\\");
+    lines.push("npx perpl deploy \\\\");
     lines.push("  --implementation " + implAddress + (operatorAddress ? " \\\\" : ""));
     if (operatorAddress) {
       lines.push("  --operator " + operatorAddress);
     }
   } else {
     lines.push("OWNER_PRIVATE_KEY=<your_key> \\\\");
-    lines.push("npx perplbot deploy \\\\");
+    lines.push("npx perpl deploy \\\\");
     lines.push("  --implementation <IMPL_ADDRESS>" + (operatorAddress ? " \\\\" : ""));
     if (operatorAddress) {
       lines.push("  --operator " + operatorAddress);

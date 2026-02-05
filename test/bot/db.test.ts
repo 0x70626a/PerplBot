@@ -6,7 +6,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { rmSync, existsSync, mkdirSync } from "fs";
 
 // Test database path
-const TEST_DB_PATH = "./test-data/test-perplbot.db";
+const TEST_DB_PATH = "./test-data/test-perpl.db";
 
 // Set environment before importing
 process.env.DATABASE_PATH = TEST_DB_PATH;

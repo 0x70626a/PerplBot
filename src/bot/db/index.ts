@@ -15,7 +15,7 @@ import type {
 } from "./schema.js";
 import { rowToUser, rowToLinkRequest } from "./schema.js";
 
-const DB_PATH = process.env.DATABASE_PATH || "./data/perplbot.db";
+const DB_PATH = process.env.DATABASE_PATH || "./data/perpl.db";
 
 let db: Database.Database | null = null;
 

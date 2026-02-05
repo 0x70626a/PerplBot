@@ -1,5 +1,5 @@
 ---
-name: perplbot
+name: perpl
 description: AI assistant for automated trading on Perpl DEX
 model: haiku
 max-tokens: 100
@@ -87,53 +87,53 @@ Supported phrases:
 ### Deployment (Owner)
 ```bash
 # Deploy new DelegatedAccount
-npx perplbot deploy --implementation <impl-address> [--operator <address>] [--deposit <amount>]
+npx perpl deploy --implementation <impl-address> [--operator <address>] [--deposit <amount>]
 ```
 
 ### Trading (Operator)
 ```bash
 # Limit open long position
-npx perplbot trade open --perp btc --side long --size 0.1 --price 45000 --leverage 10
+npx perpl trade open --perp btc --side long --size 0.1 --price 45000 --leverage 10
 
 # Limit open short position
-npx perplbot trade open --perp eth --side short --size 1.0 --price 2500 --leverage 5
+npx perpl trade open --perp eth --side short --size 1.0 --price 2500 --leverage 5
 
 # Market order (IOC)
-npx perplbot trade open --perp btc --side long --size 0.1 --price 46000 --leverage 10 --ioc
+npx perpl trade open --perp btc --side long --size 0.1 --price 46000 --leverage 10 --ioc
 
 # Limit close position
-npx perplbot trade close --perp btc --side long --size 0.1 --price 46000
+npx perpl trade close --perp btc --side long --size 0.1 --price 46000
 
 # Cancel order
-npx perplbot trade cancel --perp btc --order-id 123
+npx perpl trade cancel --perp btc --order-id 123
 ```
 
 ### Account Management (Owner)
 ```bash
 # Check account status
-npx perplbot manage status
+npx perpl manage status
 
 # Add operator
-npx perplbot manage add-operator --address 0x...
+npx perpl manage add-operator --address 0x...
 
 # Remove operator
-npx perplbot manage remove-operator --address 0x...
+npx perpl manage remove-operator --address 0x...
 
 # Withdraw collateral (owner only)
-npx perplbot manage withdraw --amount 100
+npx perpl manage withdraw --amount 100
 
 # Deposit collateral
-npx perplbot manage deposit --amount 500
+npx perpl manage deposit --amount 500
 ```
 
 ## SDK Usage Examples
 
 ### Create and Manage Wallets
 ```typescript
-import { KeyManager, OwnerWallet, OperatorWallet, getChainConfig } from "perplbot";
+import { KeyManager, OwnerWallet, OperatorWallet, getChainConfig } from "perpl";
 
 // Secure key management
-const keyManager = new KeyManager("./.perplbot/keys");
+const keyManager = new KeyManager("./.perpl/keys");
 
 // Create cold wallet (owner)
 const { address: coldAddress } = keyManager.createColdWallet("secure-password");
@@ -149,7 +149,7 @@ const owner = OwnerWallet.fromPrivateKey(ownerKey, config);
 
 ### Execute Trades
 ```typescript
-import { OperatorWallet, priceToPNS, lotToLNS, leverageToHdths } from "perplbot";
+import { OperatorWallet, priceToPNS, lotToLNS, leverageToHdths } from "perpl";
 
 const operator = OperatorWallet.fromPrivateKey(hotKey, config);
 operator.connect(exchangeAddress, delegatedAccountAddress);
@@ -191,7 +191,7 @@ await operator.addMargin(16n, amountToCNS(100)); // Add 100 USD to BTC position
 
 ### Using HybridClient (API + SDK Fallback)
 ```typescript
-import { Exchange, HybridClient, PerplApiClient, API_CONFIG } from "perplbot";
+import { Exchange, HybridClient, PerplApiClient, API_CONFIG } from "perpl";
 
 // Create Exchange and optional API client
 const exchange = new Exchange(exchangeAddress, publicClient, walletClient);
@@ -214,7 +214,7 @@ const txHash = await client.execOrder(orderDesc);
 
 ### Portfolio Queries
 ```typescript
-import { Portfolio, Exchange, getChainConfig } from "perplbot";
+import { Portfolio, Exchange, getChainConfig } from "perpl";
 
 const config = getChainConfig();
 const exchange = new Exchange(config.exchangeAddress, publicClient);
@@ -252,7 +252,7 @@ console.log(`Maker fee: ${fees.makerFeePercent}%`);
 
 ### Trading Strategies
 ```typescript
-import { GridStrategy, MarketMakerStrategy } from "perplbot";
+import { GridStrategy, MarketMakerStrategy } from "perpl";
 
 // Grid trading
 const grid = new GridStrategy({
@@ -312,10 +312,10 @@ Helper functions: `priceToPNS()`, `lotToLNS()`, `leverageToHdths()`, `amountToCN
 
 Required in `.env`:
 ```
-MONAD_RPC_URL=https://testnet-rpc.monad.xyz
-CHAIN_ID=10143
-EXCHANGE_ADDRESS=0x9C216D1Ab3e0407b3d6F1d5e9EfFe6d01C326ab7
-COLLATERAL_TOKEN=0xdF5B718d8FcC173335185a2a1513eE8151e3c027
+TESTNET_RPC_URL=https://testnet-rpc.monad.xyz
+TESTNET_CHAIN_ID=10143
+TESTNET_EXCHANGE_ADDRESS=0x9C216D1Ab3e0407b3d6F1d5e9EfFe6d01C326ab7
+TESTNET_COLLATERAL_TOKEN=0xdF5B718d8FcC173335185a2a1513eE8151e3c027
 OWNER_PRIVATE_KEY=your_owner_key
 OPERATOR_PRIVATE_KEY=your_operator_key
 DELEGATED_ACCOUNT_ADDRESS=deployed_address
@@ -342,10 +342,10 @@ A wallet can authenticate with the API but still have no exchange account. Alway
 
 ```bash
 # This will show "No exchange account found" if account doesn't exist
-npx perplbot manage status
+npx perpl manage status
 
 # Create account with initial deposit
-npx perplbot manage deposit --amount 100
+npx perpl manage deposit --amount 100
 ```
 
 ### Environment Variables
@@ -354,9 +354,9 @@ npx perplbot manage deposit --amount 100
 # API mode control (default: true)
 PERPL_USE_API=true|false
 
-# API configuration
-PERPL_API_URL=https://testnet.perpl.xyz/api
-PERPL_WS_URL=wss://testnet.perpl.xyz
+# API configuration (testnet)
+TESTNET_API_URL=https://testnet.perpl.xyz/api
+TESTNET_WS_URL=wss://testnet.perpl.xyz
 
 # Fallback behavior
 PERPL_LOG_FALLBACK=true|false  # Log when falling back to SDK (default: true)
@@ -375,10 +375,10 @@ Set `PERPL_USE_API=false` when:
 
 ```bash
 # Default (API + fallback)
-npx perplbot manage status
+npx perpl manage status
 
 # Force SDK-only
-PERPL_USE_API=false npx perplbot manage status
+PERPL_USE_API=false npx perpl manage status
 ```
 
 ## Error Handling
@@ -397,7 +397,7 @@ PERPL_USE_API=false npx perplbot manage status
 
 **Solution**: Create an account with an initial deposit:
 ```bash
-npx perplbot manage deposit --amount 100
+npx perpl manage deposit --amount 100
 ```
 
 This calls `createAccount()` on the Exchange contract, which:

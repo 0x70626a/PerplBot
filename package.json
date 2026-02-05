@@ -1,12 +1,12 @@
 {
-  "name": "perplbot",
+  "name": "perpl",
   "version": "0.1.0",
   "description": "AI agent toolkit for automated trading on Perpl (perpetual DEX on Monad)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "perplbot": "./dist/cli/index.js"
+    "perpl": "./dist/cli/index.js"
   },
   "scripts": {
     "build": "tsc",

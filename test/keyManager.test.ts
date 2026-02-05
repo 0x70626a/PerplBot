@@ -91,7 +91,7 @@ describe("Key Encryption", () => {
 });
 
 describe("Keystore File Operations", () => {
-  const testDir = "./.perplbot-test-keys";
+  const testDir = "./.perpl-test-keys";
   const testPrivateKey =
     "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" as `0x${string}`;
   const testPassword = "test-password-123";
@@ -148,7 +148,7 @@ describe("Keystore File Operations", () => {
 });
 
 describe("KeyManager", () => {
-  const testDir = "./.perplbot-test-keymanager";
+  const testDir = "./.perpl-test-keymanager";
   const testPassword = "test-password-123";
   let keyManager: KeyManager;
 

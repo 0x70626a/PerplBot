@@ -46,8 +46,21 @@ Set `MULTI_USER_MODE=true` to enable multi-user support:
 ```bash
 MULTI_USER_MODE=true
 BOT_OPERATOR_PRIVATE_KEY=0x...  # Bot's operator wallet (added to users' accounts)
-DATABASE_PATH=./data/perplbot.db  # SQLite database for user storage
+DATABASE_PATH=./data/perpl.db  # SQLite database for user storage
 IMPLEMENTATION_ADDRESS=0x...  # Optional: DelegatedAccount implementation address (for /deploy)
+```
+
+### Testnet Configuration
+All contract addresses and RPC URLs default to Monad Testnet. Override with environment variables:
+
+```bash
+TESTNET_MODE=true  # Defaults to true (testnet only supported currently)
+TESTNET_RPC_URL=https://testnet-rpc.monad.xyz
+TESTNET_EXCHANGE_ADDRESS=0x9C216D1Ab3e0407b3d6F1d5e9EfFe6d01C326ab7
+TESTNET_COLLATERAL_TOKEN=0xdF5B718d8FcC173335185a2a1513eE8151e3c027
+TESTNET_CHAIN_ID=10143
+TESTNET_API_URL=https://testnet.perpl.xyz/api
+TESTNET_WS_URL=wss://testnet.perpl.xyz
 ```
 
 ## Project Structure
@@ -88,7 +101,7 @@ PerplBot/
 │   ├── keyManager.test.ts      # Key management tests
 │   └── strategies.test.ts      # Trading strategy tests
 ├── skills/                     # Claude Code skills
-│   └── perplbot.md             # Trading skill definition
+│   └── perpl.md             # Trading skill definition
 ├── package.json
 └── tsconfig.json
 ```
@@ -196,10 +209,10 @@ import {
   priceToPNS,
   lotToLNS,
   leverageToHdths,
-} from "perplbot";
+} from "perpl";
 
 // Secure key management
-const keyManager = new KeyManager("./.perplbot/keys");
+const keyManager = new KeyManager("./.perpl/keys");
 const { address } = keyManager.createHotWallet("password");
 
 // Setup operator

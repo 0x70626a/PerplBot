@@ -194,7 +194,7 @@ export function listKeystores(directory: string): WalletInfo[] {
 export class KeyManager {
   private readonly keystoreDir: string;
 
-  constructor(keystoreDir: string = "./.perplbot/keys") {
+  constructor(keystoreDir: string = "./.perpl/keys") {
     this.keystoreDir = keystoreDir;
   }
 

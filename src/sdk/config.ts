@@ -42,13 +42,20 @@ export interface ChainConfig {
 }
 
 /**
+ * Check if running in testnet mode
+ * Defaults to true since we only support testnet currently
+ */
+export const TESTNET_MODE = process.env.TESTNET_MODE !== "false";
+
+/**
  * Get chain configuration from environment
+ * Uses TESTNET_* prefixed variables for testnet configuration
  */
 export function getChainConfig(): ChainConfig {
-  const rpcUrl = process.env.MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz";
-  const exchangeAddress = (process.env.EXCHANGE_ADDRESS ??
+  const rpcUrl = process.env.TESTNET_RPC_URL ?? "https://testnet-rpc.monad.xyz";
+  const exchangeAddress = (process.env.TESTNET_EXCHANGE_ADDRESS ??
     "0x9C216D1Ab3e0407b3d6F1d5e9EfFe6d01C326ab7") as Address;
-  const collateralToken = (process.env.COLLATERAL_TOKEN ??
+  const collateralToken = (process.env.TESTNET_COLLATERAL_TOKEN ??
     "0xdF5B718d8FcC173335185a2a1513eE8151e3c027") as Address;
 
   return {
@@ -168,8 +175,8 @@ export function validateOperatorConfig(config: EnvConfig): asserts config is Env
  * Default API configuration for Perpl testnet
  */
 export const API_CONFIG: ApiConfig = {
-  baseUrl: process.env.PERPL_API_URL || "https://testnet.perpl.xyz/api",
-  wsUrl: process.env.PERPL_WS_URL || "wss://testnet.perpl.xyz",
+  baseUrl: process.env.TESTNET_API_URL || "https://testnet.perpl.xyz/api",
+  wsUrl: process.env.TESTNET_WS_URL || "wss://testnet.perpl.xyz",
   chainId: 10143,
 };
 
@@ -194,8 +201,8 @@ export const FALLBACK_CONFIG = {
  */
 export function getApiConfig(): ApiConfig {
   return {
-    baseUrl: process.env.PERPL_API_URL || "https://testnet.perpl.xyz/api",
-    wsUrl: process.env.PERPL_WS_URL || "wss://testnet.perpl.xyz",
-    chainId: parseInt(process.env.CHAIN_ID || "10143", 10),
+    baseUrl: process.env.TESTNET_API_URL || "https://testnet.perpl.xyz/api",
+    wsUrl: process.env.TESTNET_WS_URL || "wss://testnet.perpl.xyz",
+    chainId: parseInt(process.env.TESTNET_CHAIN_ID || "10143", 10),
   };
 }
