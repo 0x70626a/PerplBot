@@ -6,6 +6,7 @@ AI agent toolkit for automated trading on [Perpl](https://perpl.xyz), a perpetua
 
 - [Overview](#overview)
 - [Features](#features)
+- [Roadmap](#roadmap)
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
 - [CLI Reference](#cli-reference)
@@ -29,6 +30,65 @@ PerplBot provides a TypeScript SDK and CLI for building trading bots on Perpl. I
 - **Portfolio Queries** — Markets, positions, PnL, funding rates, fees
 - **Strategies** — Grid trading, market making with position-based skew
 - **Interfaces** — CLI, TypeScript SDK, Telegram bot, Claude Code skills
+
+## Roadmap
+
+### Trading Features
+
+- [ ] TWAP/VWAP order execution
+- [ ] MEV protection
+- [ ] Copy trading / reverse copy trading
+- [ ] View transaction history
+
+### DeFi Integrations
+
+- [ ] Swap aggregation
+- [ ] Cross-chain bridging to Monad via fun.xyz
+- [ ] Auto-swap wallet assets to AUSD → deposit → trade
+- [ ] Deposit MON in lending → borrow AUSD → buy perp
+
+### Automated Strategies
+
+- [ ] Delta neutral: funding > threshold → buy spot, short perp
+- [ ] Funding rate arbitrage between Perpl and other perp DEXes
+- [ ] Complex multi-metric strategies (funding + RSI + OI + correlation)
+- [ ] Monte Carlo backtesting for strategy validation
+- [ ] PineScript compatibility for TradingView strategies
+- [ ] Yield maximization: perps + lending + liquid staking (hedged)
+
+### Alerts & Monitoring
+
+- [ ] Liquidation cluster alerts
+- [ ] Thick orderbook level alerts
+- [ ] Large position opened alerts
+- [ ] Significant liquidation alerts
+- [ ] User-customizable alert preferences
+
+### UX Improvements
+
+- [ ] Context memory ("Use same size as last time?", "Add stop loss?")
+- [ ] Pre-execution order summary (asset, size, leverage, max loss, liq price)
+- [ ] Learn user risk tolerance over time
+- [ ] Clear distinction between info, suggestions, and executed trades
+- [ ] Different notification styles for different events (+100% gain vs liquidation)
+
+### Risk Management & Permissions
+
+- [ ] Granular user permissions (max position size, no withdrawals, etc.)
+- [ ] Portfolio stress testing via user-defined scenario simulations
+- [ ] Auto-defend liquidation (using available collateral or wallet assets)
+- [ ] Manual trading only vs automated strategies toggle
+- [ ] Active monitoring vs notifications disabled
+
+### Education
+
+- [ ] Perpl features explanations for newbies
+- [ ] Partner project guides (Fastlane, etc.) and Perpl integrations
+
+### Social & Vaults
+
+- [ ] Vault access for other users to deposit funds on your agent
+- [ ] Leaderboard: "Who runs the best agent on Perpl?"
 
 ## Quick Start
 
