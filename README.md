@@ -2,227 +2,121 @@
 
 AI agent toolkit for automated trading on [Perpl](https://perpl.xyz), a perpetual DEX on Monad.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [CLI Reference](#cli-reference)
+- [SDK Usage](#sdk-usage)
+- [Telegram Bot](#telegram-bot)
+- [Claude Code Integration](#claude-code-integration)
+- [Configuration](#configuration)
+- [Scripts](#scripts)
+- [Related Projects](#related-projects)
+
 ## Overview
 
 PerplBot provides a TypeScript SDK and CLI for building trading bots on Perpl. It implements the **owner/operator wallet pattern** using the [delegated-account](https://github.com/PerplFoundation/delegated-account) smart contract, enabling secure separation between cold storage (owner) and hot trading wallets (operator).
 
-**Key security feature**: Operators can execute trades but can NEVER withdraw funds — this is enforced at the smart contract level.
+**Key security feature**: Operators can execute trades but can NEVER withdraw funds — enforced at the smart contract level.
 
 ## Features
 
-### Wallet Management
-- Create and manage cold (owner) and hot (operator) wallets
-- Encrypted key storage with password protection (PBKDF2 + AES-256-GCM)
-- Secure owner/operator separation enforced on-chain
-
-### Trading Operations
-- **Market orders** (IOC) — instant execution
-- **Limit orders** — resting orders on the book
-- **Position management** — reduce positions, add margin
-- **Order management** — cancel, modify orders
-
-### Portfolio Queries
-- Available markets and prices
-- Open positions with real-time PnL
-- Account balance and margin usage
-- Funding rates and countdown to next funding
-- Trading fees (maker/taker)
-
-### Trading Strategies
-- Grid trading strategy
-- Market making with position-based skew
-
-## Prerequisites
-
-- **Node.js 18+** — for running the SDK and CLI
-- **Foundry** (optional) — for deploying contracts. Install from [book.getfoundry.sh](https://book.getfoundry.sh/getting-started/installation)
-
-## Installation
-
-```bash
-npm install
-```
-
-## Getting Started
-
-### Option 1: Automated Setup (Recommended)
-
-Run the setup script to install dependencies and generate wallets:
-
-```bash
-npm run setup
-```
-
-Or just generate wallets:
-
-```bash
-npm run generate-wallets
-```
-
-### Option 2: Manual Setup
-
-#### Step 1: Generate Wallets
-
-You need two wallets:
-- **Owner (Cold) Wallet**: For deployment, deposits, withdrawals
-- **Operator (Hot) Wallet**: For trading only (cannot withdraw)
-
-Generate wallets using one of these methods:
-
-**Using the built-in script:**
-```bash
-npx tsx scripts/generate-wallets.ts
-```
-
-**Using Node.js directly:**
-```bash
-npx tsx -e "
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-const pk = generatePrivateKey();
-const account = privateKeyToAccount(pk);
-console.log('Address:', account.address);
-console.log('Private Key:', pk);
-"
-```
-
-Run twice — once for owner, once for operator.
-
-**Using Foundry:**
-```bash
-cast wallet new
-```
-
-#### Step 2: Configure Environment
-
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your wallet private keys:
-
-```env
-# Monad Testnet Configuration
-MONAD_RPC_URL=https://testnet-rpc.monad.xyz
-CHAIN_ID=10143
-
-# Contract Addresses (Monad Testnet)
-EXCHANGE_ADDRESS=0x9C216D1Ab3e0407b3d6F1d5e9EfFe6d01C326ab7
-COLLATERAL_TOKEN=0xdF5B718d8FcC173335185a2a1513eE8151e3c027
-
-# Wallet Private Keys
-OWNER_PRIVATE_KEY=0x...your_owner_private_key...
-OPERATOR_PRIVATE_KEY=0x...your_operator_private_key...
-
-# Set after deploying DelegatedAccount
-DELEGATED_ACCOUNT_ADDRESS=
-```
-
-#### Step 3: Fund Your Wallets
-
-1. **Get testnet MON** (for gas) from the Monad faucet
-   - Fund the owner wallet address
-
-2. **Get testnet USD stable** (for trading collateral)
-   - You'll need USD stable tokens in the owner wallet to deposit
-
-#### Step 4: Deploy DelegatedAccount
-
-**Option A: One-command deployment (Recommended)**
-
-Deploy everything in one command (requires [Foundry](https://book.getfoundry.sh/getting-started/installation)):
-
-```bash
-npm run deploy:all -- 100
-```
-
-This will:
-1. Deploy the DelegatedAccount implementation contract
-2. Deploy a proxy pointing to the implementation
-3. Register your operator wallet
-4. Deposit 100 USD stable as trading collateral
-
-**Option B: Step-by-step deployment**
-
-First, deploy the implementation contract:
-
-```bash
-npm run deploy:implementation
-```
-
-This outputs an implementation address. Then deploy your proxy:
-
-```bash
-npm run dev -- deploy \
-  --implementation <IMPLEMENTATION_ADDRESS> \
-  --operator <YOUR_OPERATOR_ADDRESS> \
-  --deposit 100
-```
-
-**Option C: Use existing implementation**
-
-If an implementation is already deployed on the network, you can skip to deploying the proxy:
-
-```bash
-npm run dev -- deploy \
-  --implementation 0x<EXISTING_IMPL_ADDRESS> \
-  --operator <YOUR_OPERATOR_ADDRESS> \
-  --deposit 100
-```
-
-After deployment, add the proxy contract address to your `.env`:
-
-```env
-DELEGATED_ACCOUNT_ADDRESS=0x...deployed_proxy_address...
-```
-
-#### Step 5: Start Trading
-
-Check your account status:
-
-```bash
-npm run dev -- manage status
-```
-
-Open a position:
-
-```bash
-npm run dev -- trade open --perp btc --side long --size 0.1 --price 45000 --leverage 10
-```
+- **Wallet Management** — Cold/hot wallet separation, encrypted key storage (PBKDF2 + AES-256-GCM)
+- **Trading** — Market orders (IOC), limit orders, position management, order cancellation
+- **Portfolio Queries** — Markets, positions, PnL, funding rates, fees
+- **Strategies** — Grid trading, market making with position-based skew
+- **Interfaces** — CLI, TypeScript SDK, Telegram bot, Claude Code skills
 
 ## Quick Start
 
-### CLI Usage
+### Prerequisites
+
+- **Node.js 18+**
+- **Foundry** (optional, for contract deployment) — [install](https://book.getfoundry.sh/getting-started/installation)
+
+### Setup
 
 ```bash
-# Deploy a new delegated account
-npm run dev -- deploy --implementation <addr> --operator <hot-wallet> --deposit 100
+# Install and generate wallets
+npm install
+npm run setup
 
-# View available markets with prices and funding rates
-npm run dev -- manage markets
+# Or manually: copy .env.example to .env and add your keys
+cp .env.example .env
+```
 
-# Open a long position
-npm run dev -- trade open --perp btc --side long --size 0.1 --price 45000 --leverage 10
+### Deploy & Trade
+
+```bash
+# Deploy DelegatedAccount with 100 USD collateral (requires Foundry)
+npm run deploy:all -- 100
 
 # Check account status
 npm run dev -- manage status
 
-# Cancel an order
-npm run dev -- trade cancel --perp btc --order-id 123
+# View markets
+npm run dev -- manage markets
 
-# Cancel all orders on a market
-npm run dev -- trade cancel-all --perp btc
-
-# Withdraw funds (owner only)
-npm run dev -- manage withdraw --amount 100
+# Open a position
+npm run dev -- trade open --perp btc --side long --size 0.1 --price 45000 --leverage 10
 ```
 
-### SDK Usage
+## Architecture
+
+```
+┌─────────────────┐     ┌─────────────────────┐     ┌──────────────┐
+│  Owner Wallet   │────▶│  DelegatedAccount   │────▶│   Exchange   │
+│  (Cold Storage) │     │  (Smart Contract)   │     │   (Perpl)    │
+└─────────────────┘     └─────────────────────┘     └──────────────┘
+                               ▲
+                               │ (trading only)
+                        ┌──────┴──────────┐
+                        │ Operator Wallet │
+                        │  (Hot Wallet)   │
+                        └─────────────────┘
+```
+
+| Role | Capabilities |
+|------|-------------|
+| **Owner** | Deploy, withdraw, add/remove operators |
+| **Operator** | Trading only — cannot withdraw |
+| **DelegatedAccount** | Proxy contract enforcing access control |
+
+## CLI Reference
+
+```bash
+# Account Management
+npm run dev -- manage status              # Account balance and positions
+npm run dev -- manage markets             # Prices and funding rates
+npm run dev -- manage withdraw --amount 100  # Withdraw (owner only)
+
+# Trading
+npm run dev -- trade open --perp btc --side long --size 0.1 --price 45000 --leverage 10
+npm run dev -- trade open --perp btc --side long --size 0.1 --price 46000 --leverage 10 --ioc  # Market order
+npm run dev -- trade cancel --perp btc --order-id 123
+npm run dev -- trade cancel-all --perp btc
+
+# Deployment
+npm run dev -- deploy --implementation <addr> --operator <hot-wallet> --deposit 100
+```
+
+### Perpetual Markets
+
+| Market | Perp ID |
+|--------|---------|
+| BTC | 16 |
+| ETH | 32 |
+| SOL | 48 |
+| MON | 64 |
+| ZEC | 256 |
+
+## SDK Usage
 
 ```typescript
 import {
-  KeyManager,
   OperatorWallet,
   Portfolio,
   getChainConfig,
@@ -250,143 +144,20 @@ portfolio.setAccountId(accountId);
 const positions = await portfolio.getPositions();
 ```
 
-## Architecture
-
-```
-┌─────────────────┐     ┌─────────────────────┐     ┌──────────────┐
-│  Owner Wallet   │────▶│  DelegatedAccount   │────▶│   Exchange   │
-│  (Cold Storage) │     │  (Smart Contract)   │     │   (Perpl)    │
-└─────────────────┘     └─────────────────────┘     └──────────────┘
-                               ▲
-                               │ (trading only)
-                        ┌──────┴──────────┐
-                        │ Operator Wallet │
-                        │  (Hot Wallet)   │
-                        └─────────────────┘
-```
-
-- **Owner**: Full control — deploy, withdraw, add/remove operators
-- **Operator**: Trading only — cannot withdraw funds
-- **DelegatedAccount**: Proxy contract enforcing access control
-
-## Perpetual Markets
-
-Perpetual IDs from [dex-sdk testnet config](https://github.com/PerplFoundation/dex-sdk/blob/main/crates/sdk/src/lib.rs):
-
-| Market | Perp ID |
-|--------|---------|
-| BTC    | 16      |
-| ETH    | 32      |
-| SOL    | 48      |
-| MON    | 64      |
-| ZEC    | 256     |
-
-View live market data with:
-
-```bash
-npm run dev -- manage markets
-```
-
-Output:
-```
-Symbol  Mark Price    Oracle Price  Funding/8h  Long OI     Short OI    Status
---------------------------------------------------------------------------------
-BTC     $77,746.50    $77,745.50    +0.0150%    35.3789     35.3789     Active
-ETH     $2,304.16     $2,303.45     +0.0240%    656.571     656.571     Active
-SOL     $102.90       $102.89       -0.0130%    4374.687    4374.687    Active
-MON     $0.02         $0.02         -0.0500%    22240799    22240799    Active
-ZEC     $298.26       $298.42       +0.0500%    594.275     594.275     Active
-```
-
-## Configuration
-
-Create a `.env` file:
-
-```env
-MONAD_RPC_URL=https://testnet-rpc.monad.xyz
-CHAIN_ID=10143
-EXCHANGE_ADDRESS=0x9C216D1Ab3e0407b3d6F1d5e9EfFe6d01C326ab7
-COLLATERAL_TOKEN=0xdF5B718d8FcC173335185a2a1513eE8151e3c027
-OWNER_PRIVATE_KEY=your_owner_key
-OPERATOR_PRIVATE_KEY=your_operator_key
-DELEGATED_ACCOUNT_ADDRESS=your_deployed_address
-```
-
-## Scripts
-
-| Command | Description |
-|---------|-------------|
-| `npm run setup` | Full setup: install deps + generate wallets |
-| `npm run generate-wallets` | Generate owner and operator wallets |
-| `npm run deploy:implementation` | Deploy DelegatedAccount implementation (requires Foundry) |
-| `npm run deploy:all -- <deposit>` | Deploy implementation + proxy in one command |
-| `npm run dev -- <cmd>` | Run CLI commands in development mode |
-| `npm run bot` | Start the Telegram bot |
-| `npm run build` | Build TypeScript to dist/ |
-| `npm run typecheck` | Type check without emitting |
-| `npm test` | Run unit tests (local, no network) |
-| `npm run test:unit` | Run unit tests only |
-| `npm run test:testnet` | Run integration tests against Monad testnet |
-| `npm run test:all` | Run all tests (unit + testnet) |
-
-## Development
-
-```bash
-# Type check
-npm run typecheck
-
-# Run tests (239 tests)
-npm test
-
-# Build
-npm run build
-```
-
-## Claude Code Integration
-
-PerplBot includes Claude Code skills for AI-assisted trading:
-
-### /perpl - Direct CLI Commands
-```
-/perpl manage status        # Check account and positions
-/perpl manage markets       # View prices and funding
-/perpl trade open --perp btc --side long --size 0.001 --price 75000 --leverage 2
-```
-
-### /perpl-type - Natural Language Interface
-Use plain English for any Perpl command:
-```
-/perpl-type show me my account      # Queries execute instantly
-/perpl-type what are the prices
-/perpl-type btc order book
-/perpl-type deposit 100
-/perpl-type cancel all eth orders
-/perpl-type long 0.01 btc at 78000 5x   # Trades confirm first
-```
-
 ## Telegram Bot
 
 Trade via Telegram with natural language commands.
 
 ### Setup
 
-1. **Create a bot** via [@BotFather](https://t.me/BotFather) on Telegram
-   - Send `/newbot` and follow the prompts
-   - Copy the token BotFather gives you
-
-2. **Get your user ID** from [@userinfobot](https://t.me/userinfobot)
-   - Send any message and it replies with your numeric ID
-
-3. **Add to `.env`**:
+1. Create a bot via [@BotFather](https://t.me/BotFather) and copy the token
+2. Get your user ID from [@userinfobot](https://t.me/userinfobot)
+3. Add to `.env`:
    ```env
-   TELEGRAM_BOT_TOKEN=your_bot_token_here
-   TELEGRAM_USER_ID=your_numeric_user_id
+   TELEGRAM_BOT_TOKEN=your_bot_token
+   TELEGRAM_USER_ID=your_numeric_id
    ```
-
-4. **Start the bot**:
-   ```bash
-   npm run bot
-   ```
+4. Start: `npm run bot`
 
 ### Commands
 
@@ -396,40 +167,65 @@ Trade via Telegram with natural language commands.
 | `/markets` | Prices and funding rates |
 | `/help` | All available commands |
 
-### Natural Language
+### Natural Language Examples
 
-Just send a message:
+```
+status                          # Account info
+markets                         # Prices
+long 0.01 btc at 78000 5x       # Open position (confirms first)
+cancel all btc orders           # Cancel orders
+close all                       # Close everything
+```
 
-**Account & Market Info**
-- "status" or "balance" or "positions"
-- "markets" or "prices"
-- "btc order book" or "eth book"
-- "btc trades" or "recent eth trades"
-- "my btc orders" — view open orders
+## Claude Code Integration
 
-**Trading (with confirmation)**
-- "long 0.01 btc at 78000 5x"
-- "short 0.1 eth at 3000"
-- "buy 1 sol at market"
-- "long btc $100 at market 3x" — USD amounts supported
+```bash
+# Direct CLI commands
+/perpl manage status
+/perpl trade open --perp btc --side long --size 0.001 --price 75000 --leverage 2
 
-**Order Management**
-- "cancel btc order 123"
-- "cancel all btc orders"
+# Natural language
+/perpl-type show me my account
+/perpl-type long 0.01 btc at 78000 5x
+```
 
-**Position Management**
-- "close position btc" — close specific market
-- "close all" — cancel all orders + close all positions
-- "close all eth" — cancel + close for one market
+## Configuration
 
-### Security
+```env
+# Network
+MONAD_RPC_URL=https://testnet-rpc.monad.xyz
+CHAIN_ID=10143
 
-- **Single-user mode**: Only your Telegram ID can use the bot
-- **Trade confirmation**: All trades require clicking Confirm before execution
-- **Deposits/withdrawals disabled**: Use CLI for fund movements
+# Contracts (Monad Testnet)
+EXCHANGE_ADDRESS=0x9C216D1Ab3e0407b3d6F1d5e9EfFe6d01C326ab7
+COLLATERAL_TOKEN=0xdF5B718d8FcC173335185a2a1513eE8151e3c027
+
+# Wallets
+OWNER_PRIVATE_KEY=0x...
+OPERATOR_PRIVATE_KEY=0x...
+DELEGATED_ACCOUNT_ADDRESS=0x...  # Set after deployment
+
+# Telegram Bot (optional)
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_USER_ID=...
+```
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run setup` | Install deps + generate wallets |
+| `npm run generate-wallets` | Generate owner/operator wallets |
+| `npm run deploy:all -- <amt>` | Deploy everything + deposit |
+| `npm run dev -- <cmd>` | Run CLI commands |
+| `npm run bot` | Start Telegram bot |
+| `npm run build` | Build TypeScript |
+| `npm run typecheck` | Type check |
+| `npm test` | Run tests |
 
 ## Related Projects
 
+- [api-docs](https://github.com/PerplFoundation/api-docs) — Perpl REST & WebSocket API documentation
 - [delegated-account](https://github.com/PerplFoundation/delegated-account) — Owner/operator smart contract
 - [dex-sdk](https://github.com/PerplFoundation/dex-sdk) — Perpl exchange SDK and ABIs
 
