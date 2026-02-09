@@ -325,13 +325,18 @@ export async function analyzeTransaction(
       transport: http(anvil.rpcUrl),
     });
 
-    // 7. Snapshot pre-state
-    const preState = await snapshotAccount(
-      forkClient,
-      exchangeAddress,
-      accountAddress,
-      perpId ?? 0n,
-    );
+    // 7. Snapshot pre-state (gracefully handle accounts that don't exist)
+    let preState: AccountSnapshot;
+    try {
+      preState = await snapshotAccount(
+        forkClient,
+        exchangeAddress,
+        accountAddress,
+        perpId ?? 0n,
+      );
+    } catch {
+      preState = { balanceCNS: 0n, lockedBalanceCNS: 0n, position: null, ethBalance: 0n };
+    }
 
     // 8. Read perpInfo on fork
     let perpInfo: PerpetualInfo | null = null;
@@ -397,12 +402,16 @@ export async function analyzeTransaction(
       matches = extractMatches(replayEvents);
 
       // 10. Snapshot post-state
-      postState = await snapshotAccount(
-        forkClient,
-        exchangeAddress,
-        accountAddress,
-        perpId ?? 0n,
-      );
+      try {
+        postState = await snapshotAccount(
+          forkClient,
+          exchangeAddress,
+          accountAddress,
+          perpId ?? 0n,
+        );
+      } catch {
+        // Account may not exist post-replay either
+      }
     } catch (err: any) {
       // Replay reverted — capture failure info
       replaySuccess = false;
