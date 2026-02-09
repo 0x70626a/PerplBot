@@ -91,7 +91,9 @@ PerplBot/
 │   │   │   ├── liquidation.ts   # Liquidation price simulator (pure math)
 │   │   │   ├── liquidation-report.ts # Liquidation terminal report
 │   │   │   ├── strategy-sim.ts  # Strategy dry-run simulation
-│   │   │   └── strategy-report.ts # Strategy simulation report
+│   │   │   ├── strategy-report.ts # Strategy simulation report
+│   │   │   ├── fork-liquidation.ts # Fork-based liquidation simulator
+│   │   │   └── fork-liquidation-report.ts # Fork liquidation terminal report
 │   │   ├── state/              # State management
 │   │   │   └── exchange.ts     # Exchange state tracking
 │   │   ├── config.ts           # Environment config
@@ -111,7 +113,8 @@ PerplBot/
 │   │   ├── dry-run.test.ts     # Report formatting & visualization tests
 │   │   ├── forensics.test.ts  # Forensics unit tests
 │   │   ├── liquidation.test.ts # Liquidation simulator tests
-│   │   └── strategy-sim.test.ts # Strategy simulation tests
+│   │   ├── strategy-sim.test.ts # Strategy simulation tests
+│   │   └── fork-liquidation.test.ts # Fork liquidation tests
 │   ├── orders.test.ts          # Order construction tests
 │   ├── positions.test.ts       # Position calculation tests
 │   ├── keyManager.test.ts      # Key management tests
@@ -164,6 +167,11 @@ PerplBot/
   - Price sweep with equity/margin bars across configurable range
   - Exact liquidation price calculation (long & short)
   - Funding rate projection showing liq price drift over time
+- `show liquidation --perp <name> --fork` — Fork-based liquidation verification (requires Anvil):
+  - Forks chain, manipulates mark/oracle prices in contract storage
+  - Uses contract's own PnL calculation to verify liquidation boundary
+  - Binary search for exact fork-verified liquidation price
+  - Compares fork result vs pure-math estimate (divergence analysis)
   - Distance-to-liquidation in % and USD
   - Open interest context
 

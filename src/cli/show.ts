@@ -15,6 +15,8 @@ import {
   lnsToLot,
   simulateLiquidation,
   printLiquidationReport,
+  simulateForkLiquidation,
+  printForkLiquidationReport,
 } from "../sdk/index.js";
 
 // Market name to ID mapping
@@ -325,6 +327,7 @@ export function registerShowCommand(program: Command): void {
     .requiredOption("--perp <name>", "Perpetual (btc, eth, sol, mon, zec)")
     .option("--range <pct>", "Price range to sweep (%)", "30")
     .option("--funding <hours>", "Funding projection hours", "24")
+    .option("--fork", "Use fork-based simulation (requires Anvil)")
     .action(async (options) => {
       const config = loadEnvConfig();
       validateOwnerConfig(config);
@@ -357,7 +360,7 @@ export function registerShowCommand(program: Command): void {
       // Get perp info
       const perpInfo = await exchange.getPerpetualInfo(perpId);
 
-      // Run simulation
+      // Always run pure-math simulation (fast)
       const result = simulateLiquidation(
         perpId,
         position,
@@ -369,7 +372,21 @@ export function registerShowCommand(program: Command): void {
         },
       );
 
-      // Print report
-      printLiquidationReport(result);
+      if (options.fork) {
+        // Fork-based simulation: verify on-chain
+        console.log("Starting fork-based liquidation simulation...");
+        const forkResult = await simulateForkLiquidation(
+          config,
+          perpId,
+          perpName,
+          position,
+          perpInfo,
+          accountInfo.accountId,
+          { priceRangePct: parseInt(options.range, 10) },
+        );
+        printForkLiquidationReport(forkResult);
+      } else {
+        printLiquidationReport(result);
+      }
     });
 }
