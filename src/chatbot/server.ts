@@ -291,8 +291,24 @@ async function streamWithToolLoop(
 
       sseWrite(res, "tool_result", { name: toolUse.name, result: JSON.parse(resultStr) });
 
-      // Include tool context in the text history so Claude remembers what happened
-      allTextParts.push(`[Called ${toolUse.name}: ${resultStr}]`);
+      // Include tool context in the text history so Claude remembers what happened.
+      // For simulate_strategy, store only the compact batch orders (not the massive full result).
+      if (toolUse.name === "simulate_strategy") {
+        try {
+          const parsed = JSON.parse(resultStr);
+          const summary = {
+            totalOrders: parsed.totalOrders,
+            filledOrders: parsed.filledOrders,
+            restingOrders: parsed.restingOrders,
+            _batchOrders: parsed._batchOrders,
+          };
+          allTextParts.push(`[Called simulate_strategy: ${JSON.stringify(summary)}]`);
+        } catch {
+          allTextParts.push(`[Called ${toolUse.name}: ${resultStr}]`);
+        }
+      } else {
+        allTextParts.push(`[Called ${toolUse.name}: ${resultStr}]`);
+      }
 
       toolResults.push({
         type: "tool_result",

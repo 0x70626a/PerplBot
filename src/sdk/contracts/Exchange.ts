@@ -223,6 +223,14 @@ export class Exchange {
     return this.walletClient;
   }
 
+  /** Get the signer address (for nonce management). */
+  getSignerAddress(): Address {
+    const walletClient = this.ensureWalletClient();
+    const account = walletClient.account;
+    if (!account) throw new Error("Wallet client must have an account");
+    return account.address;
+  }
+
   // ============ Read Functions ============
 
   /**
@@ -584,7 +592,7 @@ export class Exchange {
   /**
    * Execute a single order
    */
-  async execOrder(orderDesc: OrderDesc): Promise<Hash> {
+  async execOrder(orderDesc: OrderDesc, nonce?: number): Promise<Hash> {
     const walletClient = this.ensureWalletClient();
     const account = walletClient.account;
     if (!account) throw new Error("Wallet client must have an account");
@@ -620,6 +628,7 @@ export class Exchange {
       to: callAddress,
       data,
       chain: walletClient.chain,
+      ...(nonce !== undefined && { nonce }),
     });
   }
 

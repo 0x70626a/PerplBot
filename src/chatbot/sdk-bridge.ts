@@ -151,8 +151,8 @@ export async function initSDK(): Promise<void> {
 
 // ============ Helpers for executing orders ============
 
-async function execOrder(orderDesc: OrderDesc): Promise<Hash> {
-  return exchange.execOrder(orderDesc);
+async function execOrder(orderDesc: OrderDesc, nonce?: number): Promise<Hash> {
+  return exchange.execOrder(orderDesc, nonce);
 }
 
 // ============ Read-only methods ============
@@ -272,6 +272,7 @@ export async function openPosition(params: {
   price: number;
   leverage: number;
   is_market_order?: boolean;
+  nonce?: number;
 }) {
   const perpId = resolvePerpId(params.market);
   const perpInfo = await portfolio.getMarket(perpId);
@@ -291,9 +292,9 @@ export async function openPosition(params: {
       }
     } else {
       if (params.side === "long") {
-        txHash = await operatorWallet.openLong({ perpId, pricePNS, lotLNS, leverageHdths: leverageH });
+        txHash = await operatorWallet.openLong({ perpId, pricePNS, lotLNS, leverageHdths: leverageH, nonce: params.nonce });
       } else {
-        txHash = await operatorWallet.openShort({ perpId, pricePNS, lotLNS, leverageHdths: leverageH });
+        txHash = await operatorWallet.openShort({ perpId, pricePNS, lotLNS, leverageHdths: leverageH, nonce: params.nonce });
       }
     }
   } else {
@@ -315,7 +316,7 @@ export async function openPosition(params: {
       lastExecutionBlock: 0n,
       amountCNS: 0n,
     };
-    txHash = await execOrder(orderDesc);
+    txHash = await execOrder(orderDesc, params.nonce);
   }
 
   return {
@@ -462,10 +463,16 @@ export async function batchOpenPositions(orders: Array<{
   price: number;
   leverage: number;
 }>) {
+  // Fetch current nonce and manually increment per order to avoid mempool collisions
+  const nonce = await publicClient.getTransactionCount({
+    address: exchange.getSignerAddress(),
+    blockTag: "pending",
+  });
   const results = [];
-  for (const order of orders) {
+  for (let i = 0; i < orders.length; i++) {
+    const order = orders[i];
     try {
-      const result = await openPosition(order);
+      const result = await openPosition({ ...order, nonce: nonce + i });
       results.push(result);
     } catch (err) {
       results.push({
@@ -738,8 +745,23 @@ export async function simulateStrategy(params: {
 
   const result = await runStrategySimulation(envConfig, simConfig);
   const reportAnsi = captureConsole(() => printStrategySimReport(result));
+  const priceDecimals = result.priceDecimals;
+  const lotDecimals = result.lotDecimals;
+  const perpName = params.market.toUpperCase();
+
+  // Build compact orders list for batch_open_positions (human-readable)
+  const batchOrders = result.orderDescs.map((od, i) => ({
+    market: perpName,
+    side: od.orderType === OrderType.OpenLong ? "long" as const : "short" as const,
+    size: lnsToLot(od.lotLNS, lotDecimals),
+    price: pnsToPrice(od.pricePNS, priceDecimals),
+    leverage: Number(od.leverageHdths) / 100,
+    status: result.orderResults[i]?.status ?? "unknown",
+  }));
+
   return {
     ...strategySimResultToJson(result),
+    _batchOrders: batchOrders,
     _report: ansiToHtml(reportAnsi),
   };
 }

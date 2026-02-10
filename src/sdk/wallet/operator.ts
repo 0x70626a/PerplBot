@@ -205,8 +205,8 @@ export class OperatorWallet {
   /**
    * Execute a single order
    */
-  async execOrder(orderDesc: OrderDesc): Promise<Hash> {
-    return this.getExchange().execOrder(orderDesc);
+  async execOrder(orderDesc: OrderDesc, nonce?: number): Promise<Hash> {
+    return this.getExchange().execOrder(orderDesc, nonce);
   }
 
   /**
@@ -228,6 +228,7 @@ export class OperatorWallet {
     fillOrKill?: boolean;
     immediateOrCancel?: boolean;
     expiryBlock?: bigint;
+    nonce?: number;
   }): Promise<Hash> {
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
@@ -246,7 +247,7 @@ export class OperatorWallet {
       amountCNS: 0n,
     };
 
-    return this.execOrder(orderDesc);
+    return this.execOrder(orderDesc, params.nonce);
   }
 
   /**
@@ -261,6 +262,7 @@ export class OperatorWallet {
     fillOrKill?: boolean;
     immediateOrCancel?: boolean;
     expiryBlock?: bigint;
+    nonce?: number;
   }): Promise<Hash> {
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
@@ -279,7 +281,7 @@ export class OperatorWallet {
       amountCNS: 0n,
     };
 
-    return this.execOrder(orderDesc);
+    return this.execOrder(orderDesc, params.nonce);
   }
 
   /**
