@@ -333,8 +333,34 @@ export async function openPosition(params: {
         txHash = await operatorWallet.openShort({ perpId, pricePNS, lotLNS, leverageHdths: leverageH, nonce: params.nonce });
       }
     }
+  } else if (params.is_market_order && wsClient && wsAccountId !== undefined) {
+    // Owner mode, market order → WS API (takes liquidity, faster matching)
+    const lastBlock = Number(await publicClient.getBlockNumber()) + 1000;
+    const orderType = params.side === "long" ? 1 : 2; // OpenLong : OpenShort
+    const requestId = wsClient.submitOrder({
+      rq: Date.now(),
+      mkt: Number(perpId),
+      acc: wsAccountId,
+      t: orderType as never,
+      p: Number(pricePNS),
+      s: Number(lotLNS),
+      fl: 4 as never, // IOC
+      lv: Number(leverageH),
+      lb: lastBlock,
+    });
+    return {
+      success: true,
+      requestId,
+      route: "api",
+      market: params.market.toUpperCase(),
+      side: params.side,
+      size: params.size,
+      price: params.price,
+      leverage: params.leverage,
+      type: "market",
+    };
   } else {
-    // Owner mode — build OrderDesc and execOrder
+    // Owner mode, limit order → on-chain SDK (adds liquidity to book)
     const orderType = params.side === "long" ? OrderType.OpenLong : OrderType.OpenShort;
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
@@ -346,7 +372,7 @@ export async function openPosition(params: {
       expiryBlock: 0n,
       postOnly: false,
       fillOrKill: false,
-      immediateOrCancel: params.is_market_order ?? false,
+      immediateOrCancel: false,
       maxMatches: 0n,
       leverageHdths: leverageH,
       lastExecutionBlock: 0n,
@@ -423,7 +449,35 @@ export async function closePosition(params: {
         txHash = await operatorWallet.closeShort({ perpId, pricePNS, lotLNS: rawLotLNS });
       }
     }
+  } else if (isMarket && wsClient && wsAccountId !== undefined) {
+    // Owner mode, market close → WS API (takes liquidity, faster matching)
+    const lastBlock = Number(await publicClient.getBlockNumber()) + 1000;
+    const apiOrderType = isLong ? 3 : 4; // CloseLong : CloseShort
+    const requestId = wsClient.submitOrder({
+      rq: Date.now(),
+      mkt: Number(perpId),
+      acc: wsAccountId,
+      t: apiOrderType as never,
+      p: Number(pricePNS),
+      s: Number(rawLotLNS),
+      fl: 4 as never, // IOC
+      lv: 0,
+      lb: lastBlock,
+    });
+    const closedSize = Number(rawLotLNS) / Number(10n ** lotDecimals);
+    const closePrice = Number(pricePNS) / Number(10n ** priceDecimals);
+    return {
+      success: true,
+      requestId,
+      route: "api",
+      market: params.market.toUpperCase(),
+      side: isLong ? "long" : "short",
+      size: closedSize,
+      price: closePrice,
+      type: "market",
+    };
   } else {
+    // Owner mode, limit close → on-chain SDK (adds liquidity to book)
     const orderType = isLong ? OrderType.CloseLong : OrderType.CloseShort;
     const orderDesc: OrderDesc = {
       orderDescId: 0n,

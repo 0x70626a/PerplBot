@@ -10,7 +10,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import { tools, executeTool } from "./tools.js";
-import { getLastBatchOrders, clearLastBatchOrders, batchOpenPositions } from "./sdk-bridge.js";
+import { getLastBatchOrders, clearLastBatchOrders, batchOpenPositions, setStopLoss, setTakeProfit } from "./sdk-bridge.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,13 +28,16 @@ CLI-only: deposit, withdraw
 
 Style: Concise. Tables for multi-row. $XX,XXX.XX for USD. Reports from analysis/sim tools display automatically — add 1-2 line takeaway only, never repeat report data.
 
-Rules: ALWAYS use tools, never guess. After dry_run_trade → ask "Execute this trade?" On confirm → call open_position with same params (no re-confirm). Write ops: show full params then ask EXACTLY like this example: "LONG 0.01 BTC @ $78,000 (5x limit) — Proceed? Reply \`long 0.01 btc at 78000 5x\` to confirm." ALWAYS include the full executable command in backticks after "Reply" so it survives history trimming. "at market" → get_markets for price, +1-2% slippage, is_market_order=true. debug_transaction/simulate_strategy need Anvil.
-After trade execution (open/close/cancel), ALWAYS show the tx hash and suggest: \`debug <txHash>\` to analyze it.
-After get_liquidation_analysis, you MUST suggest TP/SL trigger orders using size and entryPrice from result:
-- SL: 5% above liq price (long) or 5% below (short), rounded to clean number
-- TP: entry + 2×(entry - SL) for long, entry - 2×(SL - entry) for short, rounded
-Show: **Suggested TP/SL:** with \`sl <market> at <slPrice>\` and \`tp <market> at <tpPrice>\` as clickable commands. These use set_stop_loss/set_take_profit (trigger orders that wait for price). "sl"→set_stop_loss, "tp"→set_take_profit.
-After simulate_strategy, list the generated orders and ask: "Place these N orders? Reply \`place orders\` to confirm." On confirm → call batch_open_positions with the orders from the sim result (no re-confirm).
+Rules: ALWAYS use tools, never guess. debug_transaction/simulate_strategy need Anvil.
+
+TRADE CONFIRMATION (MANDATORY — no exceptions):
+1. User mentions a trade → NEVER call open_position/close_position. Only call get_markets (for "at market" pricing). Then show preview: "LONG 0.01 BTC @ $78,000 (5x limit) — Proceed? Reply \`long 0.01 btc at 78000 5x\` to confirm." ALWAYS include the full executable command in backticks.
+2. User re-enters the exact command → NOW call open_position/close_position. No re-confirm needed.
+3. "at market" → call get_markets, add 1-2% slippage, show preview with calculated price. Do NOT call open_position in the same turn.
+After dry_run_trade → ask "Execute this trade?" On confirm → call open_position (no re-confirm).
+After simulate_strategy → ask "Place these N orders? Reply \`place orders\`." On confirm → batch_open_positions (no re-confirm).
+
+AFTER TRADE EXECUTION: Show result only. Do NOT call get_liquidation_analysis or any analysis tools after a trade. Only suggest \`debug <txHash>\` if txHash is present. "sl"→set_stop_loss, "tp"→set_take_profit.
 
 Markets: BTC=16 ETH=32 SOL=48 MON=64 ZEC=256. Collateral: AUSD (6 dec).`;
 
@@ -204,6 +207,56 @@ async function handleChat(req: IncomingMessage, res: ServerResponse) {
     }
   }
 
+  // Direct "sl <market> at <price>" — bypass Claude for stop-loss
+  const slMatch = userText.match(/^(?:sl|stop[\s-]?loss)\s+(\w+)\s+(?:at\s+)?(\d+(?:\.\d+)?)\s*$/i);
+  if (slMatch) {
+    const [, market, priceStr] = slMatch;
+    const triggerPrice = parseFloat(priceStr);
+    console.log(`[req] sl handler: ${market} at ${triggerPrice}`);
+    try {
+      sseWrite(res, "tool_call", { name: "set_stop_loss", input: { market, trigger_price: triggerPrice } });
+      const result = await setStopLoss({ market, trigger_price: triggerPrice });
+      sseWrite(res, "tool_result", { name: "set_stop_loss", result });
+      const msg = `**${result.type}** set for ${result.market} ${result.side} — triggers at $${triggerPrice.toLocaleString()} (${result.triggerCondition})`;
+      sseWrite(res, "text", { text: msg });
+      sseWrite(res, "assistant_message", { text: msg });
+    } catch (err) {
+      const msg = `Stop-loss failed: ${(err as Error).message}`;
+      sseWrite(res, "text", { text: msg });
+      sseWrite(res, "assistant_message", { text: msg });
+    }
+    const elapsed = Date.now() - requestStart;
+    console.log(`[req] Done (${elapsed}ms)`);
+    sseWrite(res, "done", {});
+    res.end();
+    return;
+  }
+
+  // Direct "tp <market> at <price>" — bypass Claude for take-profit
+  const tpMatch = userText.match(/^(?:tp|take[\s-]?profit)\s+(\w+)\s+(?:at\s+)?(\d+(?:\.\d+)?)\s*$/i);
+  if (tpMatch) {
+    const [, market, priceStr] = tpMatch;
+    const triggerPrice = parseFloat(priceStr);
+    console.log(`[req] tp handler: ${market} at ${triggerPrice}`);
+    try {
+      sseWrite(res, "tool_call", { name: "set_take_profit", input: { market, trigger_price: triggerPrice } });
+      const result = await setTakeProfit({ market, trigger_price: triggerPrice });
+      sseWrite(res, "tool_result", { name: "set_take_profit", result });
+      const msg = `**${result.type}** set for ${result.market} ${result.side} — triggers at $${triggerPrice.toLocaleString()} (${result.triggerCondition})`;
+      sseWrite(res, "text", { text: msg });
+      sseWrite(res, "assistant_message", { text: msg });
+    } catch (err) {
+      const msg = `Take-profit failed: ${(err as Error).message}`;
+      sseWrite(res, "text", { text: msg });
+      sseWrite(res, "assistant_message", { text: msg });
+    }
+    const elapsed = Date.now() - requestStart;
+    console.log(`[req] Done (${elapsed}ms)`);
+    sseWrite(res, "done", {});
+    res.end();
+    return;
+  }
+
   try {
     const fullText = await streamWithToolLoop(client, messages, res, maxTokens);
     // Send the full assistant text (including tool context) for client-side history
@@ -219,19 +272,13 @@ async function handleChat(req: IncomingMessage, res: ServerResponse) {
   res.end();
 }
 
-// Tools that return results directly without Claude post-processing.
-// Reports/data display automatically — Claude commentary is redundant.
+// Tools with rich reports that return results directly — Claude commentary is redundant.
+// Simpler tools (funding, fees, orderbook, trades) still go through Claude for formatting.
 const DIRECT_RETURN_TOOLS = new Set([
-  // Simulation
   "simulate_strategy",
   "dry_run_trade",
   "debug_transaction",
-  // Analysis
   "get_liquidation_analysis",
-  "get_orderbook",
-  "get_recent_trades",
-  "get_funding_info",
-  "get_trading_fees",
 ]);
 
 /**
@@ -373,11 +420,25 @@ async function streamWithToolLoop(
 
     if (toolUseBlocks.length === 0) break;
 
+    // Guard: skip analysis tools when bundled with write tools in the same turn
+    const WRITE_TOOLS = new Set(["open_position", "close_position", "cancel_order"]);
+    const hasWrite = toolUseBlocks.some(tb => WRITE_TOOLS.has(tb.name));
+    const skippedTools = hasWrite
+      ? new Set(toolUseBlocks.filter(tb => !WRITE_TOOLS.has(tb.name) && tb.name !== "get_markets").map(tb => tb.id))
+      : new Set<string>();
+
     // Execute each tool — check if all are direct-return
-    const allDirect = toolUseBlocks.every(tb => DIRECT_RETURN_TOOLS.has(tb.name));
+    const allDirect = toolUseBlocks.filter(tb => !skippedTools.has(tb.id)).every(tb => DIRECT_RETURN_TOOLS.has(tb.name));
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
     for (const toolUse of toolUseBlocks) {
+      // Skip analysis tools bundled with write tools (Claude being too aggressive)
+      if (skippedTools.has(toolUse.id)) {
+        const skipMsg = JSON.stringify({ skipped: true, reason: "Do not call analysis tools alongside trade execution." });
+        toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: skipMsg });
+        continue;
+      }
+
       sseWrite(res, "tool_call", { name: toolUse.name, input: toolUse.input });
 
       const { data: resultStr, report } = await executeTool(toolUse.name, toolUse.input as Record<string, unknown>);
