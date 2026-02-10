@@ -17,6 +17,7 @@ import {
   Exchange,
   HybridClient,
   PerplApiClient,
+  PerplWebSocketClient,
   API_CONFIG,
   USE_API,
   PERPETUALS,
@@ -52,6 +53,10 @@ let mode: "operator" | "owner";
 // Only set in operator mode
 let operatorWallet: OperatorWallet | undefined;
 
+// WebSocket client for trigger orders (SL/TP) — set during init
+let wsClient: PerplWebSocketClient | undefined;
+let wsAccountId: number | undefined;
+
 const PERP_NAMES: Record<string, bigint> = {
   BTC: PERPETUALS.BTC,
   ETH: PERPETUALS.ETH,
@@ -86,6 +91,7 @@ export async function initSDK(): Promise<void> {
     // Try API connect (non-fatal)
     try {
       await operatorWallet.connectApi();
+      wsClient = operatorWallet.getWsClient();
       console.log("[chatbot] API connected (operator mode)");
     } catch (err) {
       console.warn("[chatbot] API connect failed (contract-only):", (err as Error).message);
@@ -98,6 +104,14 @@ export async function initSDK(): Promise<void> {
       operatorWallet.getApiClient(),
     );
     await portfolio.setAccountByAddress(config.delegatedAccountAddress);
+
+    // Get account ID for WebSocket trigger orders
+    if (wsClient) {
+      try {
+        const summary = await portfolio.getAccountSummary();
+        wsAccountId = Number(summary.accountId);
+      } catch { /* non-fatal */ }
+    }
 
     console.log("[chatbot] SDK initialized (operator mode)");
   } else if (config.ownerPrivateKey) {
@@ -140,6 +154,23 @@ export async function initSDK(): Promise<void> {
       apiClient,
     );
     await portfolio.setAccountByAddress(owner.address);
+
+    // WebSocket for trigger orders (SL/TP)
+    if (apiClient) {
+      try {
+        const authNonce = apiClient.getAuthNonce();
+        const authCookies = apiClient.getAuthCookies();
+        if (authNonce) {
+          wsClient = new PerplWebSocketClient(API_CONFIG.wsUrl, API_CONFIG.chainId);
+          await wsClient.connectTrading(authNonce, authCookies || undefined);
+          const summary = await portfolio.getAccountSummary();
+          wsAccountId = Number(summary.accountId);
+          console.log("[chatbot] WebSocket connected (owner mode)");
+        }
+      } catch (err) {
+        console.warn("[chatbot] WebSocket connect failed:", (err as Error).message);
+      }
+    }
 
     console.log("[chatbot] SDK initialized (owner mode)");
   } else {
@@ -490,6 +521,75 @@ export async function batchOpenPositions(orders: Array<{
     successful: results.filter((r) => r.success).length,
     failed: results.filter((r) => !r.success).length,
     results,
+  };
+}
+
+// ============ Stop Loss / Take Profit (Trigger Orders via WebSocket) ============
+
+export async function setStopLoss(params: { market: string; trigger_price: number; size?: number }) {
+  return placeTriggerOrder({ ...params, type: "stop_loss" });
+}
+
+export async function setTakeProfit(params: { market: string; trigger_price: number; size?: number }) {
+  return placeTriggerOrder({ ...params, type: "take_profit" });
+}
+
+async function placeTriggerOrder(params: {
+  market: string;
+  trigger_price: number;
+  size?: number;
+  type: "stop_loss" | "take_profit";
+}) {
+  if (!wsClient || wsAccountId === undefined) {
+    throw new Error("WebSocket trading not connected. SL/TP orders require API connection.");
+  }
+
+  const perpId = resolvePerpId(params.market);
+  const perpInfo = await exchange.getPerpetualInfo(perpId);
+  const priceDecimals = BigInt(perpInfo.priceDecimals);
+  const lotDecimals = BigInt(perpInfo.lotDecimals);
+
+  const accountSummary = await portfolio.getAccountSummary();
+  const { position } = await exchange.getPosition(perpId, accountSummary.accountId);
+
+  if (position.lotLNS === 0n) {
+    throw new Error(`No open position in ${params.market.toUpperCase()}`);
+  }
+
+  const isLong = position.positionType === PositionType.Long;
+  const lotLNS = params.size ? lotToLNS(params.size, lotDecimals) : position.lotLNS;
+  const triggerPricePNS = priceToPNS(params.trigger_price, priceDecimals);
+
+  // Long + SL: trigger when price <= SL (LTE=2), Long + TP: trigger when price >= TP (GTE=1)
+  // Short + SL: trigger when price >= SL (GTE=1), Short + TP: trigger when price <= TP (LTE=2)
+  const orderType = isLong ? 3 : 4; // CloseLong : CloseShort
+  const tpc = (isLong && params.type === "stop_loss") || (!isLong && params.type === "take_profit") ? 2 : 1;
+
+  const lastBlock = Number(await publicClient.getBlockNumber()) + 1000;
+
+  const requestId = wsClient.submitOrder({
+    rq: Date.now(),
+    mkt: Number(perpId),
+    acc: wsAccountId,
+    t: orderType as never,
+    p: 0, // Market execution when triggered
+    s: Number(lotLNS),
+    fl: 0 as never, // GTC — trigger persists until hit
+    tp: Number(triggerPricePNS),
+    tpc,
+    lv: 0,
+    lb: lastBlock,
+  });
+
+  return {
+    success: true,
+    requestId,
+    type: params.type === "stop_loss" ? "Stop Loss" : "Take Profit",
+    market: params.market.toUpperCase(),
+    side: isLong ? "long" : "short",
+    triggerPrice: params.trigger_price,
+    size: Number(lotLNS) / Number(10n ** lotDecimals),
+    triggerCondition: tpc === 1 ? "price >= trigger" : "price <= trigger",
   };
 }
 

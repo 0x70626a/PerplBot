@@ -19,6 +19,8 @@ import {
   closePositionSchema,
   cancelOrderSchema,
   batchOpenPositionsSchema,
+  setStopLossSchema,
+  setTakeProfitSchema,
 } from "./schemas.js";
 
 /** Wrap a bridge call and return MCP content blocks. */
@@ -134,6 +136,16 @@ export function createMcpServer(): McpServer {
     batchOpenPositionsSchema,
     async ({ orders }) =>
       callBridge(() => bridge.batchOpenPositions(orders)));
+
+  server.tool("set_stop_loss", "Set stop-loss trigger order. Waits for price, then closes.",
+    setStopLossSchema,
+    async ({ market, trigger_price, size }) =>
+      callBridge(() => bridge.setStopLoss({ market, trigger_price, size })));
+
+  server.tool("set_take_profit", "Set take-profit trigger order. Waits for price, then closes.",
+    setTakeProfitSchema,
+    async ({ market, trigger_price, size }) =>
+      callBridge(() => bridge.setTakeProfit({ market, trigger_price, size })));
 
   return server;
 }

@@ -91,6 +91,18 @@ export const tools: Anthropic.Tool[] = [
         leverage: { type: "number" as const },
       }, required: ["market", "side", "size", "price", "leverage"] } },
     }, required: ["orders"] } },
+  { name: "set_stop_loss", description: "Set stop-loss trigger order. Waits for price to reach level, then closes.",
+    input_schema: { type: "object" as const, properties: {
+      market: M,
+      trigger_price: { type: "number" as const, description: "Price level to trigger close" },
+      size: { type: "number" as const, description: "Omit to close full position" },
+    }, required: ["market", "trigger_price"] } },
+  { name: "set_take_profit", description: "Set take-profit trigger order. Waits for price to reach level, then closes.",
+    input_schema: { type: "object" as const, properties: {
+      market: M,
+      trigger_price: { type: "number" as const, description: "Price level to trigger close" },
+      size: { type: "number" as const, description: "Omit to close full position" },
+    }, required: ["market", "trigger_price"] } },
 ];
 
 export interface ToolExecResult {
@@ -189,6 +201,20 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         result = await bridge.batchOpenPositions(
           input.orders as Array<{ market: string; side: "long" | "short"; size: number; price: number; leverage: number }>,
         );
+        break;
+      case "set_stop_loss":
+        result = await bridge.setStopLoss({
+          market: input.market as string,
+          trigger_price: input.trigger_price as number,
+          size: input.size as number | undefined,
+        });
+        break;
+      case "set_take_profit":
+        result = await bridge.setTakeProfit({
+          market: input.market as string,
+          trigger_price: input.trigger_price as number,
+          size: input.size as number | undefined,
+        });
         break;
       default:
         result = { error: `Unknown tool: ${name}` };

@@ -98,3 +98,15 @@ const orderSchema = z.object({
 export const batchOpenPositionsSchema = {
   orders: z.array(orderSchema).describe("Array of orders"),
 };
+
+export const setStopLossSchema = {
+  market,
+  trigger_price: z.number().describe("Price level to trigger close"),
+  size: z.number().optional().describe("Omit to close full position"),
+};
+
+export const setTakeProfitSchema = {
+  market,
+  trigger_price: z.number().describe("Price level to trigger close"),
+  size: z.number().optional().describe("Omit to close full position"),
+};
