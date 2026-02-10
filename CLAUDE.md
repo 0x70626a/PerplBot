@@ -17,7 +17,7 @@ npm run build
 # Run CLI in development
 npm run dev -- <command>
 
-# Run tests (528+ tests)
+# Run tests (535+ tests)
 npm test
 
 # Run tests in watch mode
@@ -393,7 +393,7 @@ The `/reviewer` skill performs comprehensive code review with a senior engineer 
 
 **Verification Gate:**
 - `npm run typecheck` passes
-- `npm test` passes (528+ tests)
+- `npm test` passes (535+ tests)
 - No P0 or P1 issues remain
 - "Would a staff engineer approve this?"
 

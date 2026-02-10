@@ -656,4 +656,62 @@ export const ExchangeAbi = [
     ],
     stateMutability: "view",
   },
+  // Orderbook view functions
+  {
+    type: "function",
+    name: "getVolumeAtBookPrice",
+    inputs: [
+      { name: "perpId", type: "uint256" },
+      { name: "priceONS", type: "uint256" },
+    ],
+    outputs: [
+      { name: "bids", type: "uint256" },
+      { name: "expBids", type: "uint256" },
+      { name: "asks", type: "uint256" },
+      { name: "expAsks", type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getNextPriceBelowWithOrders",
+    inputs: [
+      { name: "perpId", type: "uint256" },
+      { name: "priceONS", type: "uint256" },
+    ],
+    outputs: [
+      { name: "priceBelowONS", type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getOrdersAtPriceLevel",
+    inputs: [
+      { name: "perpId", type: "uint256" },
+      { name: "priceONS", type: "uint256" },
+      { name: "pageStartOrderId", type: "uint256" },
+      { name: "ordersPerPage", type: "uint256" },
+    ],
+    outputs: [
+      {
+        name: "ordersAtPriceLevel",
+        type: "tuple[]",
+        components: [
+          { name: "accountId", type: "uint32" },
+          { name: "orderType", type: "uint8" },
+          { name: "priceONS", type: "uint24" },
+          { name: "lotLNS", type: "uint40" },
+          { name: "recycleFeeRaw", type: "uint16" },
+          { name: "expiryBlock", type: "uint32" },
+          { name: "leverageHdths", type: "uint16" },
+          { name: "orderId", type: "uint16" },
+          { name: "prevOrderId", type: "uint16" },
+          { name: "nextOrderId", type: "uint16" },
+        ],
+      },
+      { name: "numOrders", type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
 ] as const;

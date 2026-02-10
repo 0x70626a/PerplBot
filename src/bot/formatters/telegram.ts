@@ -266,8 +266,9 @@ export interface OrderBookData {
   markPrice: number;
   bids: OrderBookLevel[];
   asks: OrderBookLevel[];
-  blocksScanned: number;
-  ordersFound: number;
+  spread?: { price: number; percent: number };
+  priceLevels: number;
+  totalOrders: number;
 }
 
 /**
@@ -280,13 +281,13 @@ export function formatOrderBook(book: OrderBookData): string {
   lines.push("");
 
   if (book.asks.length === 0 && book.bids.length === 0) {
-    lines.push("No resting orders found\\.");
+    lines.push("No resting orders\\.");
   } else {
-    // Show asks (reversed so highest is at top)
     lines.push("```");
     lines.push("     Price       Size");
     lines.push("─────────────────────");
 
+    // Asks displayed high-to-low
     for (const ask of [...book.asks].reverse()) {
       const price = `$${ask.price.toFixed(2)}`.padStart(10);
       const size = ask.size.toFixed(6);
@@ -304,7 +305,10 @@ export function formatOrderBook(book: OrderBookData): string {
   }
 
   lines.push("");
-  lines.push(`Scanned ${book.blocksScanned} blocks, ${book.ordersFound} orders`);
+  if (book.spread) {
+    lines.push(`Spread: $${escapeMarkdown(book.spread.price.toFixed(2))} \\(${escapeMarkdown(book.spread.percent.toFixed(3))}%\\)`);
+  }
+  lines.push(`${book.priceLevels} price levels, ${book.totalOrders} total orders`);
 
   return lines.join("\n");
 }

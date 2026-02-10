@@ -73,159 +73,115 @@ export function registerShowCommand(program: Command): void {
 
       console.log(`Fetching ${perpName} order book...`);
 
-      // Get perpetual info for decimals
       const exchangeAddr = config.chain.exchangeAddress;
       const exchange = new Exchange(exchangeAddr, publicClient);
-      const client = new HybridClient({ exchange });
-      const perpInfo = await client.getPerpetualInfo(perpId);
+      const perpInfo = await exchange.getPerpetualInfo(perpId);
 
-      const priceDecimals = BigInt(perpInfo.priceDecimals);
-      const lotDecimals = BigInt(perpInfo.lotDecimals);
+      const priceDecimals = perpInfo.priceDecimals;
+      const lotDecimals = perpInfo.lotDecimals;
+      const basePNS = perpInfo.basePricePNS;
       const markPrice = pnsToPrice(perpInfo.markPNS, priceDecimals);
 
-      // Scan recent blocks for orders (limited to reduce RPC calls)
-      const currentBlock = await publicClient.getBlockNumber();
-      const blocksToScan = 1000n;
-      const startBlock = currentBlock - blocksToScan;
+      const onsToPrice = (ons: bigint) => pnsToPrice(ons + basePNS, priceDecimals);
 
-      const orderRequestEvent = parseAbiItem(
-        "event OrderRequest(uint256 perpId, uint256 accountId, uint256 orderDescId, uint256 orderId, uint8 orderType, uint256 pricePNS, uint256 lotLNS, uint256 expiryBlock, bool postOnly, bool fillOrKill, bool immediateOrCancel, uint256 maxMatches, uint256 leverageHdths, uint256 gasLeft)"
-      );
-      const orderPlacedEvent = parseAbiItem(
-        "event OrderPlaced(uint256 orderId, uint256 lotLNS, uint256 lockedBalanceCNS, int256 amountCNS, uint256 balanceCNS)"
-      );
-      const orderCancelledEvent = parseAbiItem(
-        "event OrderCancelled(uint256 lockedBalanceCNS, int256 amountCNS, uint256 balanceCNS)"
-      );
-      const makerFilledEvent = parseAbiItem(
-        "event MakerOrderFilled(uint256 perpId, uint256 accountId, uint256 orderId, uint256 pricePNS, uint256 lotLNS, uint256 feeCNS, uint256 lockedBalanceCNS, int256 amountCNS, uint256 balanceCNS)"
-      );
-
-      // Collect events (Monad testnet limits eth_getLogs to 100 blocks)
-      const BATCH_SIZE = 100n;
-      const requests: any[] = [];
-      const placed: Map<string, any> = new Map();
-      const cancelled: Set<string> = new Set();
-      const filled: Map<string, bigint> = new Map(); // orderId -> filled amount
-
-      console.log("Scanning recent blocks for orders...");
-
-      for (let fromBlock = startBlock; fromBlock < currentBlock; fromBlock += BATCH_SIZE) {
-        const toBlock = fromBlock + BATCH_SIZE - 1n > currentBlock ? currentBlock : fromBlock + BATCH_SIZE - 1n;
-
-        const [reqBatch, placedBatch, cancelBatch, fillBatch] = await Promise.all([
-          publicClient.getLogs({
-            address: exchangeAddr,
-            event: orderRequestEvent,
-            fromBlock,
-            toBlock,
-          }),
-          publicClient.getLogs({
-            address: exchangeAddr,
-            event: orderPlacedEvent,
-            fromBlock,
-            toBlock,
-          }),
-          publicClient.getLogs({
-            address: exchangeAddr,
-            event: orderCancelledEvent,
-            fromBlock,
-            toBlock,
-          }),
-          publicClient.getLogs({
-            address: exchangeAddr,
-            event: makerFilledEvent,
-            fromBlock,
-            toBlock,
-          }),
-        ]);
-
-        // Filter requests for this perp, non-IOC orders
-        for (const log of reqBatch) {
-          if (log.args.perpId === perpId && !log.args.immediateOrCancel) {
-            requests.push(log);
-          }
-        }
-
-        // Track placed orders by tx hash
-        for (const log of placedBatch) {
-          placed.set(log.transactionHash, log);
-        }
-
-        // Track cancellations by tx hash
-        for (const log of cancelBatch) {
-          cancelled.add(log.transactionHash);
-        }
-
-        // Track fills
-        for (const log of fillBatch) {
-          if (log.args.perpId === perpId) {
-            const orderId = log.args.orderId!.toString();
-            const prevFilled = filled.get(orderId) || 0n;
-            filled.set(orderId, prevFilled + log.args.lotLNS!);
-          }
-        }
+      // Check for empty book
+      if (perpInfo.maxBidPriceONS === 0n && perpInfo.maxAskPriceONS === 0n) {
+        console.log(`\n=== ${perpName} Order Book ===`);
+        console.log(`Mark Price: $${markPrice.toFixed(2)}\n`);
+        console.log("  (No resting orders)");
+        console.log(`\n${perpInfo.numOrders} total orders`);
+        return;
       }
 
-      // Build orderbook: aggregate by price level
-      const bids: Map<number, number> = new Map(); // price -> size
-      const asks: Map<number, number> = new Map();
+      // Walk bids downward from best bid (maxBidPriceONS)
+      async function walkBids(): Promise<Array<{ price: number; size: number; ons: bigint }>> {
+        const levels: Array<{ price: number; size: number; ons: bigint }> = [];
+        let currentONS = perpInfo.maxBidPriceONS;
+        if (currentONS === 0n) return levels;
 
-      for (const req of requests) {
-        const txHash = req.transactionHash;
-        const placedLog = placed.get(txHash);
-
-        // Skip if not placed or was cancelled
-        if (!placedLog || cancelled.has(txHash)) continue;
-
-        const orderId = placedLog.args.orderId!.toString();
-        const orderType = Number(req.args.orderType);
-        const pricePNS = req.args.pricePNS!;
-        const lotLNS = placedLog.args.lotLNS!;
-        const filledLNS = filled.get(orderId) || 0n;
-        const remainingLNS = lotLNS - filledLNS;
-
-        if (remainingLNS <= 0n) continue;
-
-        const price = pnsToPrice(pricePNS, priceDecimals);
-        const size = lnsToLot(remainingLNS, lotDecimals);
-
-        // OrderType: 0=OpenLong (bid), 1=OpenShort (ask), 2=CloseLong (ask), 3=CloseShort (bid)
-        const isBid = orderType === 0 || orderType === 3;
-
-        if (isBid) {
-          bids.set(price, (bids.get(price) || 0) + size);
-        } else {
-          asks.set(price, (asks.get(price) || 0) + size);
+        while (levels.length < depth && currentONS > 0n) {
+          const [volume, nextONS] = await Promise.all([
+            exchange.getVolumeAtBookPrice(perpId, currentONS),
+            exchange.getNextPriceBelowWithOrders(perpId, currentONS),
+          ]);
+          if (volume.bids > 0n) {
+            levels.push({
+              price: onsToPrice(currentONS),
+              size: lnsToLot(volume.bids, lotDecimals),
+              ons: currentONS,
+            });
+          }
+          currentONS = nextONS;
         }
+        return levels;
       }
 
-      // Sort and display
-      const sortedBids = [...bids.entries()].sort((a, b) => b[0] - a[0]).slice(0, depth);
-      const sortedAsks = [...asks.entries()].sort((a, b) => a[0] - b[0]).slice(0, depth);
+      // Walk asks downward from worst ask (maxAskPriceONS), collect all, take closest to spread
+      async function walkAsks(): Promise<Array<{ price: number; size: number; ons: bigint }>> {
+        const allLevels: Array<{ price: number; size: number; ons: bigint }> = [];
+        let currentONS = perpInfo.maxAskPriceONS;
+        if (currentONS === 0n) return allLevels;
+
+        let hops = 0;
+        while (currentONS > 0n && hops < 200) {
+          const [volume, nextONS] = await Promise.all([
+            exchange.getVolumeAtBookPrice(perpId, currentONS),
+            exchange.getNextPriceBelowWithOrders(perpId, currentONS),
+          ]);
+          if (volume.asks > 0n) {
+            allLevels.push({
+              price: onsToPrice(currentONS),
+              size: lnsToLot(volume.asks, lotDecimals),
+              ons: currentONS,
+            });
+          }
+          currentONS = nextONS;
+          hops++;
+        }
+        // allLevels is worst-to-best (descending price); take last `depth` = closest to spread
+        const trimmed = allLevels.slice(-depth);
+        // Return lowest-to-highest for display
+        return trimmed.reverse();
+      }
+
+      const [bidLevels, askLevels] = await Promise.all([walkBids(), walkAsks()]);
+
+      // Compute spread
+      let spreadInfo = "";
+      if (bidLevels.length > 0 && askLevels.length > 0) {
+        const bestBid = bidLevels[0].price;
+        const bestAsk = askLevels[askLevels.length - 1].price;
+        const spreadPrice = bestAsk - bestBid;
+        const spreadPct = (spreadPrice / ((bestAsk + bestBid) / 2)) * 100;
+        spreadInfo = `  Spread: $${spreadPrice.toFixed(2)} (${spreadPct.toFixed(3)}%)`;
+      }
 
       console.log(`\n=== ${perpName} Order Book ===`);
       console.log(`Mark Price: $${markPrice.toFixed(2)}\n`);
 
-      // Display asks (top to bottom = high to low price)
       console.log("         Price          Size");
       console.log("─────────────────────────────");
 
-      for (const [price, size] of sortedAsks.reverse()) {
-        console.log(`  ASK    $${price.toFixed(2).padStart(10)}    ${size.toFixed(6)}`);
+      // Asks: display high-to-low (askLevels is already low-to-high, reverse for display)
+      for (const level of askLevels) {
+        console.log(`  ASK    $${level.price.toFixed(2).padStart(10)}    ${level.size.toFixed(6)}`);
       }
 
       console.log(`  ────── $${markPrice.toFixed(2).padStart(10)} ──────`);
 
-      for (const [price, size] of sortedBids) {
-        console.log(`  BID    $${price.toFixed(2).padStart(10)}    ${size.toFixed(6)}`);
+      // Bids: display high-to-low (already in that order)
+      for (const level of bidLevels) {
+        console.log(`  BID    $${level.price.toFixed(2).padStart(10)}    ${level.size.toFixed(6)}`);
       }
 
-      if (sortedBids.length === 0 && sortedAsks.length === 0) {
-        console.log("\n  (No resting orders found in recent blocks)");
+      if (bidLevels.length === 0 && askLevels.length === 0) {
+        console.log("\n  (No resting orders)");
       }
 
-      console.log(`\nScanned ${blocksToScan} blocks, found ${requests.length} order requests`);
+      if (spreadInfo) {
+        console.log(spreadInfo);
+      }
+      console.log(`\n${bidLevels.length + askLevels.length} price levels, ${perpInfo.numOrders} total orders`);
     });
 
   // Show recent trades

@@ -123,6 +123,32 @@ export interface PerpetualInfo {
 }
 
 /**
+ * Aggregate volume at a price level from getVolumeAtBookPrice
+ */
+export interface BookPriceVolume {
+  bids: bigint;
+  expBids: bigint;
+  asks: bigint;
+  expAsks: bigint;
+}
+
+/**
+ * Individual order at a price level from getOrdersAtPriceLevel
+ */
+export interface PriceLevelOrder {
+  accountId: number;
+  orderType: number;
+  priceONS: number;
+  lotLNS: bigint;
+  recycleFeeRaw: number;
+  expiryBlock: number;
+  leverageHdths: number;
+  orderId: number;
+  prevOrderId: number;
+  nextOrderId: number;
+}
+
+/**
  * Exchange contract wrapper
  * Can be used directly or through a DelegatedAccount
  * Supports API-first queries with contract fallback
@@ -418,6 +444,65 @@ export class Exchange {
       prevOrderId: Number(result.prevOrderId),
       nextOrderId: Number(result.nextOrderId),
     };
+  }
+
+  /**
+   * Get aggregate volume at a book price level
+   */
+  async getVolumeAtBookPrice(perpId: bigint, priceONS: bigint): Promise<BookPriceVolume> {
+    const [bids, expBids, asks, expAsks] = (await this.publicClient.readContract({
+      address: this.address,
+      abi: ExchangeAbi,
+      functionName: "getVolumeAtBookPrice",
+      args: [perpId, priceONS],
+    })) as [bigint, bigint, bigint, bigint];
+
+    return { bids, expBids, asks, expAsks };
+  }
+
+  /**
+   * Get the next price below with resting orders (walk down the book)
+   * Returns 0n when no more levels exist below.
+   */
+  async getNextPriceBelowWithOrders(perpId: bigint, priceONS: bigint): Promise<bigint> {
+    return this.publicClient.readContract({
+      address: this.address,
+      abi: ExchangeAbi,
+      functionName: "getNextPriceBelowWithOrders",
+      args: [perpId, priceONS],
+    }) as Promise<bigint>;
+  }
+
+  /**
+   * Get individual orders at a price level (paginated)
+   */
+  async getOrdersAtPriceLevel(
+    perpId: bigint,
+    priceONS: bigint,
+    pageStartOrderId = 0n,
+    ordersPerPage = 100n,
+  ): Promise<{ orders: PriceLevelOrder[]; numOrders: bigint }> {
+    const [ordersRaw, numOrders] = (await this.publicClient.readContract({
+      address: this.address,
+      abi: ExchangeAbi,
+      functionName: "getOrdersAtPriceLevel",
+      args: [perpId, priceONS, pageStartOrderId, ordersPerPage],
+    })) as [any[], bigint];
+
+    const orders: PriceLevelOrder[] = ordersRaw.map((o: any) => ({
+      accountId: Number(o.accountId),
+      orderType: Number(o.orderType),
+      priceONS: Number(o.priceONS),
+      lotLNS: BigInt(o.lotLNS),
+      recycleFeeRaw: Number(o.recycleFeeRaw),
+      expiryBlock: Number(o.expiryBlock),
+      leverageHdths: Number(o.leverageHdths),
+      orderId: Number(o.orderId),
+      prevOrderId: Number(o.prevOrderId),
+      nextOrderId: Number(o.nextOrderId),
+    }));
+
+    return { orders, numOrders };
   }
 
   /**
