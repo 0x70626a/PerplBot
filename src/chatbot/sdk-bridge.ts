@@ -28,14 +28,19 @@ import {
   leverageToHdths,
   amountToCNS,
   simulateLiquidation,
+  printLiquidationReport,
   analyzeTransaction,
   forensicsResultToJson,
+  printForensicsReport,
   simulateTrade,
+  printDryRunReport,
   runStrategySimulation,
   strategySimResultToJson,
+  printStrategySimReport,
   type StrategySimConfig,
 } from "../sdk/index.js";
 import { OrderType, PositionType, type OrderDesc } from "../sdk/contracts/Exchange.js";
+import { captureConsole, ansiToHtml } from "./ansi-html.js";
 
 // Singleton state
 let exchange: Exchange;
@@ -471,41 +476,25 @@ export async function getLiquidationAnalysis(market: string) {
   const perpId = resolvePerpId(market);
   const perpInfo = await exchange.getPerpetualInfo(perpId);
   const accountSummary = await portfolio.getAccountSummary();
-  const { position, markPrice: markPricePNS } = await exchange.getPosition(perpId, accountSummary.accountId);
+  const { position } = await exchange.getPosition(perpId, accountSummary.accountId);
 
   if (position.lotLNS === 0n) {
     throw new Error(`No open position in ${market.toUpperCase()}`);
   }
 
-  const result = simulateLiquidation(
-    perpId,
-    position,
-    perpInfo,
-    market.toUpperCase(),
-  );
+  const result = simulateLiquidation(perpId, position, perpInfo, market.toUpperCase());
+  const reportAnsi = captureConsole(() => printLiquidationReport(result));
 
-  // Return a JSON-safe subset (no bigints, trim large arrays)
   return {
     market: result.perpName,
     side: result.positionType,
-    entryPrice: result.entryPrice,
-    size: result.size,
-    collateral: result.collateral,
-    currentMarkPrice: result.currentMarkPrice,
-    oraclePrice: result.oraclePrice,
-    currentPnl: result.currentPnl,
-    currentEquity: result.currentEquity,
-    currentLeverage: result.currentLeverage,
-    currentMarginRatio: result.currentMarginRatio,
     liquidationPrice: result.liquidationPrice,
     distancePct: result.distancePct,
     distanceUsd: result.distanceUsd,
-    fundingRate: result.fundingRate,
-    fundingPerHour: result.fundingPerHour,
-    fundingProjections: result.fundingProjections,
-    longOI: result.longOI,
-    shortOI: result.shortOI,
-    maintenanceMargin: result.maintenanceMargin,
+    currentMarkPrice: result.currentMarkPrice,
+    currentPnl: result.currentPnl,
+    currentEquity: result.currentEquity,
+    _report: ansiToHtml(reportAnsi),
   };
 }
 
@@ -669,7 +658,11 @@ export async function debugTransaction(txHash: string) {
     txHash as Hash,
     envConfig.chain,
   );
-  return forensicsResultToJson(result);
+  const reportAnsi = captureConsole(() => printForensicsReport(result));
+  return {
+    ...forensicsResultToJson(result),
+    _report: ansiToHtml(reportAnsi),
+  };
 }
 
 // ============ Strategy Simulation ============
@@ -709,7 +702,11 @@ export async function simulateStrategy(params: {
   };
 
   const result = await runStrategySimulation(envConfig, simConfig);
-  return strategySimResultToJson(result);
+  const reportAnsi = captureConsole(() => printStrategySimReport(result));
+  return {
+    ...strategySimResultToJson(result),
+    _report: ansiToHtml(reportAnsi),
+  };
 }
 
 // ============ Dry-Run Trade ============
@@ -726,6 +723,7 @@ export async function dryRunTrade(params: {
   const perpInfo = await exchange.getPerpetualInfo(perpId);
   const priceDecimals = BigInt(perpInfo.priceDecimals);
   const lotDecimals = BigInt(perpInfo.lotDecimals);
+  const perpName = params.market.toUpperCase();
 
   const orderType = params.side === "long" ? OrderType.OpenLong : OrderType.OpenShort;
   const orderDesc: OrderDesc = {
@@ -746,5 +744,10 @@ export async function dryRunTrade(params: {
   };
 
   const result = await simulateTrade(envConfig, orderDesc);
-  return JSON.parse(JSON.stringify(result, (_k, v) => typeof v === "bigint" ? v.toString() : v));
+  const reportAnsi = captureConsole(() =>
+    printDryRunReport(result, orderDesc, perpName, priceDecimals, lotDecimals),
+  );
+  const data = JSON.parse(JSON.stringify(result, (_k, v) => typeof v === "bigint" ? v.toString() : v));
+  data._report = ansiToHtml(reportAnsi);
+  return data;
 }

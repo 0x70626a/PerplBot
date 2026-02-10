@@ -84,6 +84,20 @@
     color: #6e7681;
   }
 
+  .message.assistant .report {
+    margin: 8px 0;
+    padding: 12px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.4;
+    overflow-x: auto;
+    white-space: pre;
+    color: #e1e4e8;
+  }
+
   /* Markdown rendering */
   .message.assistant p { margin: 4px 0; }
   .message.assistant strong { color: #f0f6fc; }
@@ -337,6 +351,15 @@ async function sendMessage() {
             toolHtml += `<span class="tool-badge">${data.name}</span> `;
             assistantDiv.innerHTML = toolHtml + renderMarkdown(assistantText);
             assistantText = '';
+            showLoading();
+          } else if (eventType === 'report') {
+            hideLoading();
+            if (!assistantDiv) {
+              assistantDiv = addMessage('assistant', '');
+            }
+            toolHtml += `<div class="report">${data.html}</div>`;
+            assistantDiv.innerHTML = toolHtml + renderMarkdown(assistantText);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
             showLoading();
           } else if (eventType === 'tool_result') {
             hideLoading();

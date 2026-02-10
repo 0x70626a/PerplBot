@@ -22,7 +22,7 @@
     "deploy:implementation": "./scripts/deploy-implementation.sh",
     "deploy:all": "./scripts/deploy-all.sh",
     "bot": "tsx src/bot/index.ts",
-    "chatbot": "tsx src/chatbot/index.ts",
+    "chatbot": "FORCE_COLOR=1 tsx src/chatbot/index.ts",
     "test:api": "tsx scripts/test-api.ts"
   },
   "keywords": [

@@ -316,10 +316,15 @@ export const tools: Anthropic.Tool[] = [
   },
 ];
 
+export interface ToolExecResult {
+  data: string;
+  report?: string;
+}
+
 /**
- * Execute a tool call and return the JSON result string.
+ * Execute a tool call and return the JSON result string + optional HTML report.
  */
-export async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
+export async function executeTool(name: string, input: Record<string, unknown>): Promise<ToolExecResult> {
   const start = Date.now();
   console.log(`[tool] ${name} called`, JSON.stringify(input));
 
@@ -407,14 +412,22 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         result = { error: `Unknown tool: ${name}` };
     }
 
+    // Extract _report before serializing for Claude
+    let report: string | undefined;
+    if (result && typeof result === "object" && "_report" in (result as Record<string, unknown>)) {
+      const obj = result as Record<string, unknown>;
+      report = obj._report as string;
+      delete obj._report;
+    }
+
     const elapsed = Date.now() - start;
-    console.log(`[tool] ${name} OK (${elapsed}ms)`, JSON.stringify(result));
-    return JSON.stringify(result);
+    console.log(`[tool] ${name} OK (${elapsed}ms)`, report ? "[+report]" : "", JSON.stringify(result).slice(0, 200));
+    return { data: JSON.stringify(result), report };
   } catch (err) {
     const elapsed = Date.now() - start;
     const error = err as Error;
     console.error(`[tool] ${name} FAILED (${elapsed}ms):`, error.message);
     if (error.stack) console.error(error.stack);
-    return JSON.stringify({ error: error.message });
+    return { data: JSON.stringify({ error: error.message }) };
   }
 }

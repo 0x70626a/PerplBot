@@ -60,7 +60,8 @@ When user types "help" or asks what you can do, show this EXACT list:
 - Format: $XX,XXX.XX for USD, percentages with %.
 - Positions: "BTC LONG 0.21 @ $68,798 | PnL: green_circle +$321.22 (+11.1%) | 5x"
 - Trades: "LONG 0.01 BTC @ $78,000 (5x) — Proceed?"
-- Never repeat raw tool data. Summarize visually.
+- Never repeat raw tool data.
+- Analysis/simulation tools (liquidation, dry-run, debug, strategy sim) display visual reports automatically. Just add a brief 1-2 line takeaway — do NOT reformat or repeat the report data.
 - Errors: one line + fix suggestion.
 
 ## Rules
@@ -248,7 +249,12 @@ async function streamWithToolLoop(
     for (const toolUse of toolUseBlocks) {
       sseWrite(res, "tool_call", { name: toolUse.name, input: toolUse.input });
 
-      const resultStr = await executeTool(toolUse.name, toolUse.input as Record<string, unknown>);
+      const { data: resultStr, report } = await executeTool(toolUse.name, toolUse.input as Record<string, unknown>);
+
+      // Send visual report to client (if available) before Claude's summary
+      if (report) {
+        sseWrite(res, "report", { html: report });
+      }
 
       sseWrite(res, "tool_result", { name: toolUse.name, result: JSON.parse(resultStr) });
 
