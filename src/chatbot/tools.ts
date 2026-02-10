@@ -81,6 +81,16 @@ export const tools: Anthropic.Tool[] = [
       market: M,
       order_id: { type: "string" as const },
     }, required: ["market", "order_id"] } },
+  { name: "batch_open_positions", description: "Place multiple orders. Use after strategy sim. Confirm with user first.",
+    input_schema: { type: "object" as const, properties: {
+      orders: { type: "array" as const, description: "Array of orders", items: { type: "object" as const, properties: {
+        market: M,
+        side: { type: "string" as const, enum: ["long", "short"] },
+        size: { type: "number" as const },
+        price: { type: "number" as const },
+        leverage: { type: "number" as const },
+      }, required: ["market", "side", "size", "price", "leverage"] } },
+    }, required: ["orders"] } },
 ];
 
 export interface ToolExecResult {
@@ -174,6 +184,11 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         break;
       case "cancel_order":
         result = await bridge.cancelOrder(input.market as string, input.order_id as string);
+        break;
+      case "batch_open_positions":
+        result = await bridge.batchOpenPositions(
+          input.orders as Array<{ market: string; side: "long" | "short"; size: number; price: number; leverage: number }>,
+        );
         break;
       default:
         result = { error: `Unknown tool: ${name}` };

@@ -455,6 +455,37 @@ export async function cancelOrder(market: string, orderId: string) {
   };
 }
 
+export async function batchOpenPositions(orders: Array<{
+  market: string;
+  side: "long" | "short";
+  size: number;
+  price: number;
+  leverage: number;
+}>) {
+  const results = [];
+  for (const order of orders) {
+    try {
+      const result = await openPosition(order);
+      results.push(result);
+    } catch (err) {
+      results.push({
+        success: false,
+        error: (err as Error).message,
+        market: order.market.toUpperCase(),
+        side: order.side,
+        size: order.size,
+        price: order.price,
+      });
+    }
+  }
+  return {
+    totalOrders: orders.length,
+    successful: results.filter((r) => r.success).length,
+    failed: results.filter((r) => !r.success).length,
+    results,
+  };
+}
+
 export async function depositCollateral(amount: number) {
   const amountCNS = amountToCNS(amount);
   const txHash = await exchange.depositCollateral(amountCNS);
@@ -488,6 +519,8 @@ export async function getLiquidationAnalysis(market: string) {
   return {
     market: result.perpName,
     side: result.positionType,
+    size: result.size,
+    entryPrice: result.entryPrice,
     liquidationPrice: result.liquidationPrice,
     distancePct: result.distancePct,
     distanceUsd: result.distanceUsd,

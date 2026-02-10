@@ -29,6 +29,11 @@ Style: Concise. Tables for multi-row. $XX,XXX.XX for USD. Reports from analysis/
 
 Rules: ALWAYS use tools, never guess. After dry_run_trade → ask "Execute this trade?" On confirm → call open_position with same params (no re-confirm). Write ops: show full params then ask EXACTLY like this example: "LONG 0.01 BTC @ $78,000 (5x limit) — Proceed? Reply \`long 0.01 btc at 78000 5x\` to confirm." ALWAYS include the full executable command in backticks after "Reply" so it survives history trimming. "at market" → get_markets for price, +1-2% slippage, is_market_order=true. debug_transaction/simulate_strategy need Anvil.
 After trade execution (open/close/cancel), ALWAYS show the tx hash and suggest: \`debug <txHash>\` to analyze it.
+After get_liquidation_analysis, you MUST suggest TP/SL orders using size and entryPrice from result:
+- SL: 5% above liq price (long) or 5% below (short), rounded to clean number
+- TP: entry + 2×(entry - SL) for long, entry - 2×(SL - entry) for short, rounded
+Show: **Suggested TP/SL:** with \`close <size> <market> at <slPrice>\` and \`close <size> <market> at <tpPrice>\` as clickable commands.
+After simulate_strategy, list the generated orders and ask: "Place these N orders? Reply \`place orders\` to confirm." On confirm → call batch_open_positions with the orders from the sim result (no re-confirm).
 
 Markets: BTC=16 ETH=32 SOL=48 MON=64 ZEC=256. Collateral: USDC (6 dec).`;
 
@@ -52,6 +57,10 @@ function getMaxTokens(message: string): number {
   const lower = message.toLowerCase();
   // Help/docs need room for the full command list
   if (lower === "help" || lower.includes("help") || lower.includes("guide") || lower.includes("commands")) return 800;
+  // Liquidation analysis includes TP/SL suggestions
+  if (lower.includes("liquidation")) return 1000;
+  // Strategy sim needs room to list orders and suggest batch placement
+  if (lower.includes("simulate") || lower.includes("strategy") || lower.includes("grid") || lower.includes(" mm ")) return 1000;
   // Explanations
   if (lower.includes("explain") || lower.includes("how does") || lower.includes("what is")) return 600;
   // Most trading/query responses are short
@@ -66,7 +75,7 @@ function trimHistory(messages: Anthropic.MessageParam[]): Anthropic.MessageParam
   const text = typeof lastUserMsg?.content === "string" ? lastUserMsg.content.toLowerCase() : "";
 
   // Contextual follow-ups need more history
-  const needsContext = /continue|earlier|as i said|same|again|yes|no|proceed|execute|confirm/.test(text);
+  const needsContext = /continue|earlier|as i said|same|again|yes|no|proceed|execute|confirm|place orders/.test(text);
   const limit = needsContext ? MAX_HISTORY_CONTEXTUAL : MAX_HISTORY;
 
   if (messages.length <= limit) return messages;
