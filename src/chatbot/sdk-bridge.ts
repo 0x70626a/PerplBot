@@ -513,7 +513,9 @@ export async function getLiquidationAnalysis(market: string) {
     throw new Error(`No open position in ${market.toUpperCase()}`);
   }
 
-  const result = simulateLiquidation(perpId, position, perpInfo, market.toUpperCase());
+  const priceDecimals = BigInt(perpInfo.priceDecimals);
+  const lotDecimals = BigInt(perpInfo.lotDecimals);
+  const result = simulateLiquidation(perpId, position, perpInfo, market.toUpperCase(), {}, priceDecimals, lotDecimals);
   const reportAnsi = captureConsole(() => printLiquidationReport(result));
 
   return {
