@@ -12,6 +12,7 @@ AI agent toolkit for automated trading on [Perpl](https://perpl.xyz), a perpetua
 - [CLI Reference](#cli-reference)
 - [SDK Usage](#sdk-usage)
 - [Telegram Bot](#telegram-bot)
+- [Web Chatbot](#web-chatbot)
 - [Claude Code Integration](#claude-code-integration)
 - [Configuration](#configuration)
 - [Scripts](#scripts)
@@ -34,7 +35,7 @@ PerplBot provides a TypeScript SDK and CLI for building trading bots on Perpl. I
 - **On-Chain Orderbook** — Reconstruct orderbook and view recent trades from on-chain events
 - **Portfolio Queries** — Markets, positions, PnL, funding rates, fees
 - **Strategies** — Grid trading, market making with position-based skew
-- **Interfaces** — CLI, TypeScript SDK, Telegram bot, Claude Code skills
+- **Interfaces** — CLI, TypeScript SDK, Telegram bot, Web chatbot, Claude Code skills
 
 ## Roadmap
 
@@ -289,6 +290,48 @@ close all btc                   # Close BTC position + cancel BTC orders
 close all                       # Close ALL positions + cancel ALL orders
 ```
 
+## Web Chatbot
+
+Browser-based trading terminal powered by Claude with streaming responses and tool execution.
+
+### Setup
+
+1. Add `ANTHROPIC_API_KEY` to `.env`
+2. Start: `npm run chatbot`
+3. Open http://localhost:3000
+
+### Commands
+
+**Portfolio**: `show account` `show positions` `show markets` `show orders`
+**Analysis**: `btc liquidation analysis` `eth funding rate` `btc fees` `btc orderbook` `recent btc trades`
+**Trading** *(confirms first)*: `long 0.01 btc at 78000 5x` `short 1 eth at market 10x` `close my btc` `cancel btc order 123`
+**Simulation**: `dry run long 0.01 btc at 78000 5x` `simulate grid btc` `simulate mm btc` `debug 0x...`
+
+### Features
+
+- **Streaming responses** — SSE-streamed Claude responses with real-time tool execution
+- **Visual reports** — ANSI terminal reports (liquidation, forensics, strategy sim) rendered as HTML
+- **Clickable commands** — Inline commands in responses are clickable to execute
+- **Clickable tx hashes** — Transaction hashes link to `debug <txHash>` analysis
+- **Command history** — Up/Down arrow keys cycle through previous commands
+- **Contextual suggestions** — Follow-up command chips based on last action
+- **Topic help** — `help trading` `help analysis` `help simulation` `help portfolio` (zero API cost)
+- **Trade confirmation** — All write operations require explicit confirmation with self-contained commands
+- **Dry-run → Execute flow** — After dry run, confirm to execute with same parameters
+- **TP/SL suggestions** — After liquidation analysis, suggests stop-loss and take-profit orders
+- **Batch order placement** — After strategy simulation, place all generated orders at once
+- **Prompt caching** — System prompt and tools cached for ~90% input token savings
+- **Dynamic token limits** — Adjusts max_tokens based on query type (400-1000)
+- **History trimming** — Smart conversation pruning with contextual awareness
+
+### Configuration
+
+```env
+ANTHROPIC_API_KEY=sk-ant-...     # Required
+CHATBOT_PORT=3000                # Default: 3000
+CHATBOT_MODEL=claude-haiku-4-5-20251001  # Default model
+```
+
 ## Claude Code Integration
 
 ```bash
@@ -331,6 +374,7 @@ TELEGRAM_USER_ID=...
 | `npm run deploy:all -- <amt>` | Deploy everything + deposit |
 | `npm run dev -- <cmd>` | Run CLI commands |
 | `npm run bot` | Start Telegram bot |
+| `npm run chatbot` | Start web chatbot |
 | `npm run build` | Build TypeScript |
 | `npm run typecheck` | Type check |
 | `npm test` | Run tests |

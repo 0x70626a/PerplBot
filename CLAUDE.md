@@ -104,6 +104,13 @@ PerplBot/
 │   │   ├── manage.ts           # Account management
 │   │   ├── simulate.ts         # Strategy dry-run simulation
 │   │   └── index.ts            # CLI entry point
+│   ├── chatbot/                # Web chatbot (Claude-powered)
+│   │   ├── index.ts            # Entry point — init SDK, start server
+│   │   ├── sdk-bridge.ts       # SDK singleton + human-friendly wrappers
+│   │   ├── tools.ts            # Claude tool definitions + executor
+│   │   ├── server.ts           # HTTP server, SSE streaming, tool-use loop
+│   │   ├── ansi-html.ts        # ANSI → HTML report conversion
+│   │   └── public/index.html   # Self-contained chat UI
 │   └── index.ts                # Main entry point
 ├── test/                       # Test files
 │   ├── api/                    # API client tests

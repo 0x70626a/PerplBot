@@ -501,7 +501,7 @@ const TOPIC_HELP = {
   analysis: {
     title: 'Analysis Commands',
     commands: [
-      { cmd: 'btc liquidation analysis', desc: 'Liquidation price, distance (% and $), margin ratio, funding drift' },
+      { cmd: 'btc liquidation analysis', desc: 'Liquidation price, distance, risk — includes TP/SL order suggestions' },
       { cmd: 'eth liquidation analysis', desc: 'Same for any market — replace with eth, sol, mon, zec' },
       { cmd: 'btc funding rate', desc: 'Current funding rate, time to next funding period' },
       { cmd: 'btc fees', desc: 'Maker and taker fee percentages' },
@@ -537,12 +537,12 @@ const TOPIC_HELP = {
   open: { alias: 'trading' },
   simulation: {
     title: 'Simulation Commands',
-    desc: 'Dry-run and debug without risking real funds. Some require Anvil.',
+    desc: 'Dry-run and debug without risking real funds. After sim, reply `place orders` to batch-execute. Some require Anvil.',
     commands: [
-      { cmd: 'dry run long 0.01 btc at 78000 5x', desc: 'Simulate opening a long — shows gas, fills, state changes' },
+      { cmd: 'dry run long 0.01 btc at 78000 5x', desc: 'Simulate opening a long — shows gas, fills, state changes. Reply to execute.' },
       { cmd: 'dry run short 0.5 sol at 200 3x', desc: 'Simulate any trade before executing' },
-      { cmd: 'simulate grid btc 5 levels 100 spacing 0.001 size 2x', desc: 'Grid strategy — 5 levels, $100 spacing, 0.001 BTC per level' },
-      { cmd: 'simulate mm btc 0.001 size 0.1% spread 2x', desc: 'Market maker strategy dry-run' },
+      { cmd: 'simulate grid btc 5 levels 100 spacing 0.001 size 2x', desc: 'Grid strategy — reply `place orders` to batch-execute all orders' },
+      { cmd: 'simulate mm btc 0.001 size 0.1% spread 2x', desc: 'Market maker strategy — reply `place orders` to batch-execute' },
       { cmd: 'debug 0x2ceb6f45d1a8ef6c369476f8fa6bcea36aaa70b02ed957d257a7fbaa75679270', desc: 'Replay a tx — decode events, state changes, failure analysis' },
     ],
   },

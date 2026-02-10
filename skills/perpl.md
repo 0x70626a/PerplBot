@@ -100,6 +100,54 @@ Supported phrases:
 - Price: "at 78000", "@ $78000", "at market"
 - Options: "maker only", "post-only"
 
+## Web Chatbot
+
+Browser-based trading terminal powered by Claude with streaming tool execution.
+
+### Start
+```bash
+npm run chatbot   # http://localhost:3000
+```
+
+### Chatbot Commands
+```
+# Portfolio
+show account | show positions | show markets | show orders
+
+# Analysis (includes visual reports)
+btc liquidation analysis     # Suggests TP/SL orders
+eth funding rate | btc fees | btc orderbook | recent btc trades
+
+# Trading (confirms first)
+long 0.01 btc at 78000 5x | short 1 eth at market 10x
+close my btc | cancel btc order 123
+
+# Simulation (requires Anvil)
+dry run long 0.01 btc at 78000 5x   # Reply to execute
+simulate grid btc | simulate mm btc  # Reply "place orders" to batch-execute
+debug 0x...                           # Tx forensics
+
+# Help (zero API cost, handled client-side)
+help trading | help analysis | help simulation | help portfolio
+```
+
+### Chatbot Features
+- **Visual reports** — ANSI terminal reports rendered as HTML in chat
+- **TP/SL suggestions** — After liquidation analysis, suggests stop-loss/take-profit orders
+- **Batch orders** — After strategy sim, place all generated orders at once
+- **Clickable commands** — Inline code in responses executes on click
+- **Clickable tx hashes** — Links to `debug <txHash>` analysis
+- **Dry-run → Execute** — Confirm after dry run to execute with same params
+- **Prompt caching** — ~90% input token savings via `cache_control: ephemeral`
+- **Smart history** — Trims context while preserving trade confirmations
+
+### Environment
+```env
+ANTHROPIC_API_KEY=sk-ant-...           # Required
+CHATBOT_PORT=3000                      # Default: 3000
+CHATBOT_MODEL=claude-haiku-4-5-20251001  # Default model
+```
+
 ## CLI Commands
 
 ### Deployment (Owner)
