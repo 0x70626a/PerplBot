@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PerplBot Chat</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f1117;
+    color: #e1e4e8;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f0f6fc;
+  }
+
+  header .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    background: #1f6feb33;
+    color: #58a6ff;
+    border-radius: 10px;
+    border: 1px solid #1f6feb55;
+  }
+
+  #chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .message {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    line-height: 1.5;
+    font-size: 14px;
+    word-wrap: break-word;
+  }
+
+  .message.user {
+    align-self: flex-end;
+    background: #1f6feb;
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+
+  .message.assistant {
+    align-self: flex-start;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-bottom-left-radius: 4px;
+  }
+
+  .message.assistant .tool-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    margin: 2px 2px;
+    background: #1a1e2a;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    color: #6e7681;
+  }
+
+  /* Markdown rendering */
+  .message.assistant p { margin: 4px 0; }
+  .message.assistant strong { color: #f0f6fc; }
+  .message.assistant code {
+    background: #161b22;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 13px;
+  }
+  .message.assistant pre {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px;
+    margin: 6px 0;
+    overflow-x: auto;
+  }
+  .message.assistant pre code {
+    background: none;
+    padding: 0;
+  }
+  .message.assistant ul, .message.assistant ol {
+    padding-left: 20px;
+    margin: 4px 0;
+  }
+  .message.assistant table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    width: 100%;
+    font-size: 13px;
+  }
+  .message.assistant th, .message.assistant td {
+    border: 1px solid #30363d;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .message.assistant th {
+    background: #161b22;
+    font-weight: 600;
+  }
+
+  .loading {
+    align-self: flex-start;
+    padding: 12px 16px;
+    color: #8b949e;
+    font-size: 14px;
+  }
+
+  .loading .dots::after {
+    content: '';
+    animation: dots 1.5s steps(4, end) infinite;
+  }
+
+  @keyframes dots {
+    0% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+  }
+
+  #input-area {
+    background: #161b22;
+    border-top: 1px solid #30363d;
+    padding: 16px 20px;
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  #input-area input {
+    flex: 1;
+    padding: 10px 14px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    color: #e1e4e8;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  #input-area input:focus {
+    border-color: #1f6feb;
+  }
+
+  #input-area input::placeholder {
+    color: #484f58;
+  }
+
+  #input-area button {
+    padding: 10px 20px;
+    background: #238636;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  #input-area button:hover { background: #2ea043; }
+  #input-area button:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PerplBot</h1>
+  <span class="badge">Monad Testnet</span>
+</header>
+
+<div id="chat-container"></div>
+
+<div id="input-area">
+  <input type="text" id="user-input" placeholder="Ask about your positions, markets, or place a trade..." autocomplete="off">
+  <button id="send-btn">Send</button>
+</div>
+
+<script>
+const chatContainer = document.getElementById('chat-container');
+const userInput = document.getElementById('user-input');
+const sendBtn = document.getElementById('send-btn');
+
+// Conversation history sent to the server
+const messages = [];
+
+function addMessage(role, html) {
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
+  div.innerHTML = html;
+  chatContainer.appendChild(div);
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+  return div;
+}
+
+function showLoading() {
+  const div = document.createElement('div');
+  div.className = 'loading';
+  div.id = 'loading';
+  div.innerHTML = 'Thinking<span class="dots"></span>';
+  chatContainer.appendChild(div);
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function hideLoading() {
+  const el = document.getElementById('loading');
+  if (el) el.remove();
+}
+
+// Basic markdown to HTML
+function renderMarkdown(text) {
+  let html = text;
+  // Code blocks
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Tables
+  html = html.replace(/^(\|.+\|)\n(\|[\s:|-]+\|)\n((?:\|.+\|\n?)*)/gm, (match, header, sep, body) => {
+    const headers = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+    const rows = body.trim().split('\n').map(row => {
+      const cells = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+    return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+  });
+  // Unordered lists
+  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+  // Ordered lists
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  // Paragraphs (lines with content separated by blank lines)
+  html = html.replace(/\n\n/g, '</p><p>');
+  // Single newlines to <br>
+  html = html.replace(/\n/g, '<br>');
+  return `<p>${html}</p>`;
+}
+
+function setEnabled(enabled) {
+  userInput.disabled = !enabled;
+  sendBtn.disabled = !enabled;
+  if (enabled) userInput.focus();
+}
+
+async function sendMessage() {
+  const text = userInput.value.trim();
+  if (!text) return;
+
+  userInput.value = '';
+  setEnabled(false);
+
+  // Show user message
+  addMessage('user', text.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+
+  // Add to history
+  messages.push({ role: 'user', content: text });
+
+  showLoading();
+
+  let assistantText = '';
+  let fullHistoryText = ''; // Full text from server (includes tool context)
+  let assistantDiv = null;
+  let toolHtml = '';
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages }),
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE events
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      let eventType = '';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const data = JSON.parse(line.slice(6));
+
+          if (eventType === 'text') {
+            hideLoading();
+            assistantText += data.text;
+            if (!assistantDiv) {
+              assistantDiv = addMessage('assistant', '');
+            }
+            assistantDiv.innerHTML = toolHtml + renderMarkdown(assistantText);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+          } else if (eventType === 'tool_call') {
+            hideLoading();
+            if (!assistantDiv) {
+              assistantDiv = addMessage('assistant', '');
+            }
+            toolHtml += `<span class="tool-badge">${data.name}</span> `;
+            assistantDiv.innerHTML = toolHtml + renderMarkdown(assistantText);
+            assistantText = '';
+            showLoading();
+          } else if (eventType === 'tool_result') {
+            hideLoading();
+            // Don't show raw JSON — Claude will summarize it visually
+            showLoading();
+          } else if (eventType === 'assistant_message') {
+            // Server sends full text including tool context for history
+            fullHistoryText = data.text;
+          } else if (eventType === 'error') {
+            hideLoading();
+            if (!assistantDiv) {
+              assistantDiv = addMessage('assistant', '');
+            }
+            assistantDiv.innerHTML += `<p style="color:#f85149">Error: ${data.error}</p>`;
+          } else if (eventType === 'done') {
+            hideLoading();
+          }
+        }
+      }
+    }
+  } catch (err) {
+    hideLoading();
+    addMessage('assistant', `<p style="color:#f85149">Connection error: ${err.message}</p>`);
+  }
+
+  // Use full history text (with tool context) for conversation history
+  const historyText = fullHistoryText || assistantText;
+  if (historyText) {
+    messages.push({ role: 'assistant', content: historyText });
+  }
+
+  setEnabled(true);
+}
+
+sendBtn.addEventListener('click', sendMessage);
+userInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Show welcome message
+addMessage('assistant', renderMarkdown(
+`**PerplBot** — Perpl DEX Trading Terminal (Monad Testnet)
+
+**Portfolio**: \`show account\` \`show positions\` \`show markets\` \`show orders\`
+**Analysis**: \`btc liquidation\` \`eth funding rate\` \`btc fees\` \`btc orderbook\` \`recent btc trades\`
+**Trading**: \`long 0.01 btc at 78000 5x\` \`close my btc\` \`cancel btc order 123\`
+**Simulation**: \`dry run long 0.01 btc at 78000 5x\` \`simulate grid btc\` \`debug 0x...\`
+
+Type **help** for full command list.`
+));
+
+userInput.focus();
+</script>
+</body>
+</html>
