@@ -27,6 +27,7 @@ CLI-only: deposit, withdraw
 Style: Concise. Tables for multi-row. $XX,XXX.XX for USD. Reports from analysis/sim tools display automatically — add 1-2 line takeaway only, never repeat report data.
 
 Rules: ALWAYS use tools, never guess. After dry_run_trade → ask "Execute this trade?" On confirm → call open_position with same params (no re-confirm). Write ops → one-line desc + "Proceed?" first. "at market" → get_markets for price, +1-2% slippage, is_market_order=true. debug_transaction/simulate_strategy need Anvil.
+After trade execution (open/close/cancel), ALWAYS show the tx hash and suggest: \`debug <txHash>\` to analyze it.
 
 Markets: BTC=16 ETH=32 SOL=48 MON=64 ZEC=256. Collateral: USDC (6 dec).`;
 

@@ -170,6 +170,21 @@
     background: #1f6feb22;
   }
 
+  /* Clickable tx hashes */
+  .message.assistant .tx-link {
+    color: #58a6ff;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+  }
+  .message.assistant .tx-link:hover {
+    color: #79c0ff;
+    text-decoration-style: solid;
+  }
+
   #suggestions {
     background: #161b22;
     padding: 8px 20px 0;
@@ -304,9 +319,10 @@ const FOLLOW_UP_MAP = {
   dry_run_trade: ['yes, execute the trade', 'show positions', 'btc liquidation analysis'],
   simulate_strategy: ['show positions', 'dry run long 0.01 btc at 78000 5x'],
   debug_transaction: ['show positions', 'show account'],
-  open_position: ['show positions', 'btc liquidation analysis', 'show account'],
+  open_position: ['show positions', 'btc liquidation analysis'],
   close_position: ['show positions', 'show account'],
   cancel_order: ['show orders', 'show positions'],
+  // Note: after trades, the tx hash in the response is clickable to debug
 };
 
 let lastToolCalled = null;
@@ -346,7 +362,16 @@ function makeCodesClickable(container) {
     // Skip code inside <pre> (code blocks)
     if (el.parentElement && el.parentElement.tagName === 'PRE') return;
     const text = el.textContent || '';
-    if (looksLikeCommand(text)) {
+    // Tx hash in inline code → debug command
+    if (/^0x[0-9a-fA-F]{64}$/.test(text)) {
+      el.classList.add('cmd');
+      el.textContent = text.slice(0, 10) + '...' + text.slice(-6);
+      el.title = text + '\nClick to debug this transaction';
+      el.addEventListener('click', () => {
+        userInput.value = 'debug ' + text;
+        userInput.focus();
+      });
+    } else if (looksLikeCommand(text)) {
       el.classList.add('cmd');
       el.title = 'Click to use this command';
       el.addEventListener('click', () => {
@@ -355,6 +380,53 @@ function makeCodesClickable(container) {
       });
     }
   });
+  // Make tx hashes clickable (0x + 64 hex chars)
+  linkifyTxHashes(container);
+}
+
+// Find 0x{64} hex strings in text nodes and wrap them in clickable spans
+function linkifyTxHashes(container) {
+  const TX_RE = /0x[0-9a-fA-F]{64}/g;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+  for (const node of textNodes) {
+    // Skip nodes inside <code>, <pre>, or already-processed .tx-link
+    const parent = node.parentElement;
+    if (!parent) continue;
+    if (parent.closest('code, pre, .tx-link')) continue;
+
+    const text = node.textContent || '';
+    if (!TX_RE.test(text)) continue;
+    TX_RE.lastIndex = 0;
+
+    const frag = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match;
+    while ((match = TX_RE.exec(text)) !== null) {
+      // Text before the match
+      if (match.index > lastIndex) {
+        frag.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      // The tx hash as a clickable span
+      const hash = match[0];
+      const span = document.createElement('span');
+      span.className = 'tx-link';
+      span.textContent = hash.slice(0, 10) + '...' + hash.slice(-6);
+      span.title = hash + '\nClick to debug this transaction';
+      span.addEventListener('click', () => {
+        userInput.value = 'debug ' + hash;
+        userInput.focus();
+      });
+      frag.appendChild(span);
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) {
+      frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+    parent.replaceChild(frag, node);
+  }
 }
 
 function showLoading() {
