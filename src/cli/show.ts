@@ -59,6 +59,7 @@ export function registerShowCommand(program: Command): void {
     .description("Show order book for a market")
     .requiredOption("--perp <name>", "Perpetual (btc, eth, sol, mon, zec)")
     .option("--depth <n>", "Number of price levels to show", "10")
+    .option("--level <n>", "Book depth: 1 (top), 2 (levels), 3 (orders)", "2")
     .action(async (options) => {
       const config = loadEnvConfig();
 
@@ -69,13 +70,20 @@ export function registerShowCommand(program: Command): void {
 
       const perpId = resolvePerpId(options.perp);
       const depth = parseInt(options.depth, 10);
-      const perpName = PERP_IDS_TO_NAMES[perpId.toString()] || options.perp.toUpperCase();
+      const level = parseInt(options.level, 10);
+      let perpName = PERP_IDS_TO_NAMES[perpId.toString()] || options.perp.toUpperCase();
 
-      console.log(`Fetching ${perpName} order book...`);
+      if (level < 1 || level > 3) {
+        console.error("--level must be 1, 2, or 3");
+        process.exit(1);
+      }
+
+      console.log(`Fetching ${perpName} order book (L${level})...`);
 
       const exchangeAddr = config.chain.exchangeAddress;
       const exchange = new Exchange(exchangeAddr, publicClient);
       const perpInfo = await exchange.getPerpetualInfo(perpId);
+      perpName = perpInfo.symbol || perpName;
 
       const priceDecimals = perpInfo.priceDecimals;
       const lotDecimals = perpInfo.lotDecimals;
@@ -83,6 +91,43 @@ export function registerShowCommand(program: Command): void {
       const markPrice = pnsToPrice(perpInfo.markPNS, priceDecimals);
 
       const onsToPrice = (ons: bigint) => pnsToPrice(ons + basePNS, priceDecimals);
+
+      // ── L1: Best bid/ask only (fast path) ──
+      if (level === 1) {
+        const bestBidONS = perpInfo.maxBidPriceONS;
+        const bestAskONS = perpInfo.minAskPriceONS;
+
+        const [bidVol, askVol] = await Promise.all([
+          bestBidONS > 0n ? exchange.getVolumeAtBookPrice(perpId, bestBidONS) : null,
+          bestAskONS > 0n ? exchange.getVolumeAtBookPrice(perpId, bestAskONS) : null,
+        ]);
+
+        console.log(`\n=== ${perpName} Order Book (L1) ===`);
+        console.log(`Mark Price: $${markPrice.toFixed(2)}\n`);
+
+        if (askVol && askVol.asks > 0n) {
+          console.log(`  Best Ask: $${onsToPrice(bestAskONS).toFixed(2)}  size ${lnsToLot(askVol.asks, lotDecimals).toFixed(6)}`);
+        } else {
+          console.log("  Best Ask: ---");
+        }
+
+        console.log(`  Mark:     $${markPrice.toFixed(2)}`);
+
+        if (bidVol && bidVol.bids > 0n) {
+          console.log(`  Best Bid: $${onsToPrice(bestBidONS).toFixed(2)}  size ${lnsToLot(bidVol.bids, lotDecimals).toFixed(6)}`);
+        } else {
+          console.log("  Best Bid: ---");
+        }
+
+        if (bidVol && bidVol.bids > 0n && askVol && askVol.asks > 0n) {
+          const bestBid = onsToPrice(bestBidONS);
+          const bestAsk = onsToPrice(bestAskONS);
+          const spreadPrice = bestAsk - bestBid;
+          const spreadPct = (spreadPrice / ((bestAsk + bestBid) / 2)) * 100;
+          console.log(`  Spread: $${spreadPrice.toFixed(2)} (${spreadPct.toFixed(3)}%)`);
+        }
+        return;
+      }
 
       // Check for empty book
       if (perpInfo.maxBidPriceONS === 0n && perpInfo.maxAskPriceONS === 0n) {
@@ -146,6 +191,68 @@ export function registerShowCommand(program: Command): void {
 
       const [bidLevels, askLevels] = await Promise.all([walkBids(), walkAsks()]);
 
+      // ── L3: Individual orders at each price level ──
+      if (level === 3) {
+        const ORDER_TYPE_NAMES: Record<number, string> = { 0: "OpenLong", 1: "OpenShort", 2: "CloseLong", 3: "CloseShort" };
+
+        console.log(`\n=== ${perpName} Order Book (L3) ===`);
+        console.log(`Mark Price: $${markPrice.toFixed(2)}\n`);
+
+        // Asks (high to low — askLevels is already low-to-high, display as-is for high-to-low feel)
+        if (askLevels.length > 0) {
+          console.log("── Asks ──");
+          for (const lvl of askLevels) {
+            console.log(`  $${lvl.price.toFixed(2)} (${lvl.size.toFixed(6)} total)`);
+            const { orders } = await exchange.getOrdersAtPriceLevel(perpId, lvl.ons);
+            const askOrders = orders.filter(o => o.lotLNS > 0n && (o.orderType === 1 || o.orderType === 3));
+            if (askOrders.length === 0) {
+              console.log(`    (${lvl.size.toFixed(6)} aggregated — no individual orders)`);
+            }
+            for (const o of askOrders) {
+              const size = lnsToLot(o.lotLNS, lotDecimals);
+              const lev = (o.leverageHdths / 100).toFixed(1);
+              const expiry = o.expiryBlock > 0 ? `exp:${o.expiryBlock}` : "GTC";
+              console.log(`    #${o.orderId}  acct:${o.accountId}  ${size.toFixed(6)}  ${lev}x  ${ORDER_TYPE_NAMES[o.orderType] ?? o.orderType}  ${expiry}`);
+            }
+          }
+        }
+
+        console.log(`  ────── $${markPrice.toFixed(2).padStart(10)} ──────`);
+
+        // Bids (high to low — already in that order)
+        if (bidLevels.length > 0) {
+          console.log("── Bids ──");
+          for (const lvl of bidLevels) {
+            console.log(`  $${lvl.price.toFixed(2)} (${lvl.size.toFixed(6)} total)`);
+            const { orders } = await exchange.getOrdersAtPriceLevel(perpId, lvl.ons);
+            const bidOrders = orders.filter(o => o.lotLNS > 0n && (o.orderType === 0 || o.orderType === 2));
+            if (bidOrders.length === 0) {
+              console.log(`    (${lvl.size.toFixed(6)} aggregated — no individual orders)`);
+            }
+            for (const o of bidOrders) {
+              const size = lnsToLot(o.lotLNS, lotDecimals);
+              const lev = (o.leverageHdths / 100).toFixed(1);
+              const expiry = o.expiryBlock > 0 ? `exp:${o.expiryBlock}` : "GTC";
+              console.log(`    #${o.orderId}  acct:${o.accountId}  ${size.toFixed(6)}  ${lev}x  ${ORDER_TYPE_NAMES[o.orderType] ?? o.orderType}  ${expiry}`);
+            }
+          }
+        }
+
+        let spreadInfo = "";
+        if (bidLevels.length > 0 && askLevels.length > 0) {
+          const bestBid = bidLevels[0].price;
+          const bestAsk = askLevels[askLevels.length - 1].price;
+          const spreadPrice = bestAsk - bestBid;
+          const spreadPct = (spreadPrice / ((bestAsk + bestBid) / 2)) * 100;
+          spreadInfo = `  Spread: $${spreadPrice.toFixed(2)} (${spreadPct.toFixed(3)}%)`;
+        }
+        if (spreadInfo) console.log(spreadInfo);
+        console.log(`\n${bidLevels.length + askLevels.length} price levels, ${perpInfo.numOrders} total orders`);
+        return;
+      }
+
+      // ── L2: Aggregated price levels (default, existing behavior) ──
+
       // Compute spread
       let spreadInfo = "";
       if (bidLevels.length > 0 && askLevels.length > 0) {
@@ -200,7 +307,7 @@ export function registerShowCommand(program: Command): void {
 
       const perpId = resolvePerpId(options.perp);
       const limit = parseInt(options.limit, 10);
-      const perpName = PERP_IDS_TO_NAMES[perpId.toString()] || options.perp.toUpperCase();
+      let perpName = PERP_IDS_TO_NAMES[perpId.toString()] || options.perp.toUpperCase();
 
       console.log(`Fetching recent ${perpName} trades...`);
 
@@ -209,6 +316,7 @@ export function registerShowCommand(program: Command): void {
       const exchange = new Exchange(exchangeAddr, publicClient);
       const client = new HybridClient({ exchange });
       const perpInfo = await client.getPerpetualInfo(perpId);
+      perpName = perpInfo.symbol || perpName;
 
       const priceDecimals = BigInt(perpInfo.priceDecimals);
       const lotDecimals = BigInt(perpInfo.lotDecimals);
@@ -294,7 +402,7 @@ export function registerShowCommand(program: Command): void {
       });
 
       const perpId = resolvePerpId(options.perp);
-      const perpName = PERP_IDS_TO_NAMES[perpId.toString()] || options.perp.toUpperCase();
+      let perpName = PERP_IDS_TO_NAMES[perpId.toString()] || options.perp.toUpperCase();
       const exchangeAddr = config.chain.exchangeAddress;
       const exchange = new Exchange(exchangeAddr, publicClient);
 
@@ -315,6 +423,7 @@ export function registerShowCommand(program: Command): void {
 
       // Get perp info
       const perpInfo = await exchange.getPerpetualInfo(perpId);
+      perpName = perpInfo.symbol || perpName;
 
       // Always run pure-math simulation (fast)
       const result = simulateLiquidation(

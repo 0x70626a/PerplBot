@@ -13,6 +13,7 @@ import { parseAbiItem, type Hash, type PublicClient } from "viem";
 import {
   loadEnvConfig,
   type EnvConfig,
+  TESTNET_MODE,
   OperatorWallet,
   Portfolio,
   OwnerWallet,
@@ -22,7 +23,7 @@ import {
   API_CONFIG,
   USE_API,
   PERPETUALS,
-  ALL_PERP_IDS,
+  getActivePerpIds,
   priceToPNS,
   pnsToPrice,
   lotToLNS,
@@ -138,20 +139,23 @@ async function submitAndVerify(
   });
 }
 
-const PERP_NAMES: Record<string, bigint> = {
-  BTC: PERPETUALS.BTC,
-  ETH: PERPETUALS.ETH,
-  SOL: PERPETUALS.SOL,
-  MON: PERPETUALS.MON,
-  ZEC: PERPETUALS.ZEC,
-};
+const PERP_NAMES: Record<string, bigint> = TESTNET_MODE
+  ? {
+      BTC: PERPETUALS.BTC,
+      ETH: PERPETUALS.ETH,
+      SOL: PERPETUALS.SOL,
+      MON: PERPETUALS.MON,
+      ZEC: PERPETUALS.ZEC,
+    }
+  : {};
 
 function resolvePerpId(market: string): bigint {
   const id = PERP_NAMES[market.toUpperCase()];
-  if (id === undefined) {
-    throw new Error(`Unknown market "${market}". Available: ${Object.keys(PERP_NAMES).join(", ")}`);
-  }
-  return id;
+  if (id !== undefined) return id;
+  // Allow numeric IDs (essential for mainnet where symbols are unknown at compile time)
+  const parsed = parseInt(market, 10);
+  if (!isNaN(parsed)) return BigInt(parsed);
+  throw new Error(`Unknown market "${market}". Available: ${Object.keys(PERP_NAMES).join(", ") || "use numeric IDs (e.g. 1, 10)"}`);
 }
 
 /**
@@ -282,7 +286,7 @@ export async function getAccountSummary() {
 export async function getPositions() {
   // Use on-chain contract data (authoritative) — API can return stale sub-positions
   const accountSummary = await portfolio.getAccountSummary();
-  const perpIds = ALL_PERP_IDS as unknown as bigint[];
+  const perpIds = getActivePerpIds() as unknown as bigint[];
   const results = [];
 
   for (const perpId of perpIds) {
@@ -326,7 +330,7 @@ export async function getPositions() {
 }
 
 export async function getMarkets() {
-  const markets = await portfolio.getAvailableMarkets(ALL_PERP_IDS as unknown as bigint[]);
+  const markets = await portfolio.getAvailableMarkets(getActivePerpIds() as unknown as bigint[]);
   return markets.map((m) => ({
     market: m.symbol,
     markPrice: m.markPrice,
@@ -344,7 +348,7 @@ export async function getOpenOrders(market?: string) {
     const orders = await portfolio.getOpenOrders(perpId);
     return orders.map(formatOrder);
   }
-  const orders = await portfolio.getAllOpenOrders(ALL_PERP_IDS as unknown as bigint[]);
+  const orders = await portfolio.getAllOpenOrders(getActivePerpIds() as unknown as bigint[]);
   return orders.map(formatOrder);
 }
 
@@ -845,91 +849,149 @@ export async function getTradingFees(market: string) {
 
 // ============ Orderbook (extracted from CLI show.ts) ============
 
-const orderRequestEvent = parseAbiItem(
-  "event OrderRequest(uint256 perpId, uint256 accountId, uint256 orderDescId, uint256 orderId, uint8 orderType, uint256 pricePNS, uint256 lotLNS, uint256 expiryBlock, bool postOnly, bool fillOrKill, bool immediateOrCancel, uint256 maxMatches, uint256 leverageHdths, uint256 lastExecutionBlock, uint256 amountCNS, uint256 maxSlippageBps, uint256 gasLeft)",
-);
-const orderPlacedEvent = parseAbiItem(
-  "event OrderPlaced(uint256 orderId, uint256 lotLNS, uint256 lockedBalanceCNS, int256 amountCNS, uint256 balanceCNS)",
-);
-const orderCancelledEvent = parseAbiItem(
-  "event OrderCancelled(uint256 lockedBalanceCNS, int256 amountCNS, uint256 balanceCNS)",
-);
 const makerFilledEvent = parseAbiItem(
   "event MakerOrderFilled(uint256 perpId, uint256 accountId, uint256 orderId, uint256 pricePNS, uint256 lotLNS, uint256 feeCNS, uint256 lockedBalanceCNS, int256 amountCNS, uint256 balanceCNS)",
 );
 
-export async function getOrderbook(market: string, depth = 10) {
+export async function getOrderbook(market: string, depth = 10, level: 1 | 2 | 3 = 2) {
   const perpId = resolvePerpId(market);
-  const exchangeAddr = envConfig.chain.exchangeAddress;
   const perpInfo = await exchange.getPerpetualInfo(perpId);
   const priceDecimals = BigInt(perpInfo.priceDecimals);
   const lotDecimals = BigInt(perpInfo.lotDecimals);
   const markPrice = pnsToPrice(perpInfo.markPNS, priceDecimals);
+  const basePNS = perpInfo.basePricePNS;
+  const onsToPrice = (ons: bigint) => pnsToPrice(ons + basePNS, priceDecimals);
 
-  const currentBlock = await publicClient.getBlockNumber();
-  const blocksToScan = 1000n;
-  const startBlock = currentBlock - blocksToScan;
-  const BATCH_SIZE = 100n;
+  // ── L1: Best bid/ask only (fast path, minimal RPC) ──
+  if (level === 1) {
+    const bestBidONS = perpInfo.maxBidPriceONS;
+    const bestAskONS = perpInfo.minAskPriceONS;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const requests: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const placed = new Map<string, any>();
-  const cancelled = new Set<string>();
-  const filled = new Map<string, bigint>();
-
-  for (let fromBlock = startBlock; fromBlock < currentBlock; fromBlock += BATCH_SIZE) {
-    const toBlock = fromBlock + BATCH_SIZE - 1n > currentBlock ? currentBlock : fromBlock + BATCH_SIZE - 1n;
-
-    const [reqBatch, placedBatch, cancelBatch, fillBatch] = await Promise.all([
-      publicClient.getLogs({ address: exchangeAddr, event: orderRequestEvent, fromBlock, toBlock }),
-      publicClient.getLogs({ address: exchangeAddr, event: orderPlacedEvent, fromBlock, toBlock }),
-      publicClient.getLogs({ address: exchangeAddr, event: orderCancelledEvent, fromBlock, toBlock }),
-      publicClient.getLogs({ address: exchangeAddr, event: makerFilledEvent, fromBlock, toBlock }),
+    const [bidVol, askVol] = await Promise.all([
+      bestBidONS > 0n ? exchange.getVolumeAtBookPrice(perpId, bestBidONS) : null,
+      bestAskONS > 0n ? exchange.getVolumeAtBookPrice(perpId, bestAskONS) : null,
     ]);
 
-    for (const log of reqBatch) {
-      if (log.args.perpId === perpId && !log.args.immediateOrCancel) {
-        requests.push(log);
-      }
+    const bestBid = bidVol && bidVol.bids > 0n
+      ? { price: onsToPrice(bestBidONS), size: lnsToLot(bidVol.bids, lotDecimals) }
+      : null;
+    const bestAsk = askVol && askVol.asks > 0n
+      ? { price: onsToPrice(bestAskONS), size: lnsToLot(askVol.asks, lotDecimals) }
+      : null;
+
+    let spread: number | undefined;
+    if (bestBid && bestAsk) {
+      spread = bestAsk.price - bestBid.price;
     }
-    for (const log of placedBatch) placed.set(log.transactionHash, log);
-    for (const log of cancelBatch) cancelled.add(log.transactionHash);
-    for (const log of fillBatch) {
-      if (log.args.perpId === perpId) {
-        const oid = log.args.orderId!.toString();
-        filled.set(oid, (filled.get(oid) || 0n) + log.args.lotLNS!);
-      }
-    }
+
+    return { market: market.toUpperCase(), markPrice, level: 1, bestBid, bestAsk, spread };
   }
 
-  const bids = new Map<number, number>();
-  const asks = new Map<number, number>();
+  // ── L3: On-chain walk + individual orders per level ──
+  if (level === 3) {
+    // Walk bids
+    const bidLevels: Array<{ price: number; size: number; ons: bigint }> = [];
+    let currentONS = perpInfo.maxBidPriceONS;
+    while (bidLevels.length < depth && currentONS > 0n) {
+      const [volume, nextONS] = await Promise.all([
+        exchange.getVolumeAtBookPrice(perpId, currentONS),
+        exchange.getNextPriceBelowWithOrders(perpId, currentONS),
+      ]);
+      if (volume.bids > 0n) {
+        bidLevels.push({ price: onsToPrice(currentONS), size: lnsToLot(volume.bids, lotDecimals), ons: currentONS });
+      }
+      currentONS = nextONS;
+    }
 
-  for (const req of requests) {
-    const placedLog = placed.get(req.transactionHash);
-    if (!placedLog || cancelled.has(req.transactionHash)) continue;
+    // Walk asks (worst to best, then trim)
+    const allAsks: Array<{ price: number; size: number; ons: bigint }> = [];
+    currentONS = perpInfo.maxAskPriceONS;
+    let hops = 0;
+    while (currentONS > 0n && hops < 200) {
+      const [volume, nextONS] = await Promise.all([
+        exchange.getVolumeAtBookPrice(perpId, currentONS),
+        exchange.getNextPriceBelowWithOrders(perpId, currentONS),
+      ]);
+      if (volume.asks > 0n) {
+        allAsks.push({ price: onsToPrice(currentONS), size: lnsToLot(volume.asks, lotDecimals), ons: currentONS });
+      }
+      currentONS = nextONS;
+      hops++;
+    }
+    const askLevels = allAsks.slice(-depth).reverse();
 
-    const orderId = placedLog.args.orderId!.toString();
-    const orderType = Number(req.args.orderType);
-    const remainingLNS = placedLog.args.lotLNS! - (filled.get(orderId) || 0n);
-    if (remainingLNS <= 0n) continue;
+    // Fetch individual orders per level
+    const ORDER_TYPE_NAMES: Record<number, string> = { 0: "OpenLong", 1: "OpenShort", 2: "CloseLong", 3: "CloseShort" };
 
-    const price = pnsToPrice(req.args.pricePNS!, priceDecimals);
-    const size = lnsToLot(remainingLNS, lotDecimals);
-    const isBid = orderType === 0 || orderType === 3;
+    async function getOrdersForLevel(lvl: { ons: bigint }, side: "bid" | "ask") {
+      const { orders } = await exchange.getOrdersAtPriceLevel(perpId, lvl.ons);
+      const filtered = side === "bid"
+        ? orders.filter(o => o.lotLNS > 0n && (o.orderType === 0 || o.orderType === 2))
+        : orders.filter(o => o.lotLNS > 0n && (o.orderType === 1 || o.orderType === 3));
+      return filtered.map(o => ({
+        orderId: o.orderId,
+        accountId: o.accountId,
+        size: lnsToLot(o.lotLNS, lotDecimals),
+        leverage: o.leverageHdths / 100,
+        type: ORDER_TYPE_NAMES[o.orderType] ?? String(o.orderType),
+        expiryBlock: o.expiryBlock,
+      }));
+    }
 
-    if (isBid) bids.set(price, (bids.get(price) || 0) + size);
-    else asks.set(price, (asks.get(price) || 0) + size);
+    const bids = await Promise.all(bidLevels.map(async lvl => ({
+      price: lvl.price,
+      size: lvl.size,
+      orders: await getOrdersForLevel(lvl, "bid"),
+    })));
+
+    const asks = await Promise.all(askLevels.map(async lvl => ({
+      price: lvl.price,
+      size: lvl.size,
+      orders: await getOrdersForLevel(lvl, "ask"),
+    })));
+
+    return { market: market.toUpperCase(), markPrice, level: 3, bids, asks };
   }
+
+  // ── L2: On-chain walk (aggregated price levels) ──
+  // Walk bids downward from best bid
+  const bidLevels: Array<{ price: number; size: number }> = [];
+  let currentONS = perpInfo.maxBidPriceONS;
+  while (bidLevels.length < depth && currentONS > 0n) {
+    const [volume, nextONS] = await Promise.all([
+      exchange.getVolumeAtBookPrice(perpId, currentONS),
+      exchange.getNextPriceBelowWithOrders(perpId, currentONS),
+    ]);
+    if (volume.bids > 0n) {
+      bidLevels.push({ price: onsToPrice(currentONS), size: lnsToLot(volume.bids, lotDecimals) });
+    }
+    currentONS = nextONS;
+  }
+
+  // Walk asks downward from worst ask, collect all, take closest to spread
+  const allAsks: Array<{ price: number; size: number }> = [];
+  currentONS = perpInfo.maxAskPriceONS;
+  let hops = 0;
+  while (currentONS > 0n && hops < 200) {
+    const [volume, nextONS] = await Promise.all([
+      exchange.getVolumeAtBookPrice(perpId, currentONS),
+      exchange.getNextPriceBelowWithOrders(perpId, currentONS),
+    ]);
+    if (volume.asks > 0n) {
+      allAsks.push({ price: onsToPrice(currentONS), size: lnsToLot(volume.asks, lotDecimals) });
+    }
+    currentONS = nextONS;
+    hops++;
+  }
+  const askLevels = allAsks.slice(-depth).reverse();
 
   return {
     market: market.toUpperCase(),
     markPrice,
-    bids: [...bids.entries()].sort((a, b) => b[0] - a[0]).slice(0, depth).map(([price, size]) => ({ price, size })),
-    asks: [...asks.entries()].sort((a, b) => a[0] - b[0]).slice(0, depth).map(([price, size]) => ({ price, size })),
-    totalOrders: requests.length,
-    blocksScanned: Number(blocksToScan),
+    level: 2,
+    bids: bidLevels,
+    asks: askLevels,
+    totalOrders: Number(perpInfo.numOrders),
   };
 }
 

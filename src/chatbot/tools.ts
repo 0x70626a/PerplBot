@@ -8,7 +8,7 @@ import * as bridge from "./sdk-bridge.js";
 
 // Concise tool definitions — descriptions kept minimal to reduce token cost.
 // "M" = market param shorthand used in descriptions.
-const M = { type: "string" as const, description: "BTC/ETH/SOL/MON/ZEC" };
+const M = { type: "string" as const, description: "Market symbol (testnet: BTC/ETH/SOL/MON/ZEC) or numeric perp ID (mainnet: 1, 10)" };
 
 export const tools: Anthropic.Tool[] = [
   // ---- Read-only ----
@@ -28,7 +28,8 @@ export const tools: Anthropic.Tool[] = [
     input_schema: { type: "object" as const, properties: { market: M }, required: ["market"] } },
   { name: "get_orderbook", description: "On-chain order book (bids/asks)",
     input_schema: { type: "object" as const, properties: { market: M,
-      depth: { type: "number" as const, description: "Levels per side (default 10)" } }, required: ["market"] } },
+      depth: { type: "number" as const, description: "Levels per side (default 10)" },
+      level: { type: "number" as const, description: "1=top only, 2=levels (default), 3=individual orders" } }, required: ["market"] } },
   { name: "get_recent_trades", description: "Recent on-chain fills",
     input_schema: { type: "object" as const, properties: { market: M,
       limit: { type: "number" as const, description: "Max trades (default 20)" } }, required: ["market"] } },
@@ -157,7 +158,7 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         result = await bridge.getTradingFees(input.market as string);
         break;
       case "get_orderbook":
-        result = await bridge.getOrderbook(input.market as string, input.depth as number | undefined);
+        result = await bridge.getOrderbook(input.market as string, input.depth as number | undefined, input.level as 1 | 2 | 3 | undefined);
         break;
       case "get_recent_trades":
         result = await bridge.getRecentTrades(input.market as string, input.limit as number | undefined);

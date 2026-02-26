@@ -32,6 +32,30 @@ export const monadTestnet = defineChain({
 });
 
 /**
+ * Monad Mainnet chain definition
+ */
+export const monadMainnet = defineChain({
+  id: 143,
+  name: "Monad",
+  nativeCurrency: {
+    decimals: 18,
+    name: "Monad",
+    symbol: "MON",
+  },
+  rpcUrls: {
+    default: {
+      http: ["https://rpc.monad.xyz"],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: "Monad Explorer",
+      url: "https://monadexplorer.com",
+    },
+  },
+});
+
+/**
  * Chain configuration
  */
 export interface ChainConfig {
@@ -49,19 +73,35 @@ export const TESTNET_MODE = process.env.TESTNET_MODE !== "false";
 
 /**
  * Get chain configuration from environment
- * Uses TESTNET_* prefixed variables for testnet configuration
+ * Uses TESTNET_* prefixed variables for testnet, MAINNET_* for mainnet
  */
 export function getChainConfig(): ChainConfig {
-  const rpcUrl = process.env.TESTNET_RPC_URL ?? "https://testnet-rpc.monad.xyz";
-  const exchangeAddress = (process.env.TESTNET_EXCHANGE_ADDRESS ??
-    process.env.EXCHANGE_ADDRESS ??
-    "0x1964C32f0bE608E7D29302AFF5E61268E72080cc") as Address;
-  const collateralToken = (process.env.TESTNET_COLLATERAL_TOKEN ??
-    process.env.COLLATERAL_TOKEN ??
-    "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC") as Address;
+  if (TESTNET_MODE) {
+    const rpcUrl = process.env.TESTNET_RPC_URL ?? "https://testnet-rpc.monad.xyz";
+    const exchangeAddress = (process.env.TESTNET_EXCHANGE_ADDRESS ??
+      process.env.EXCHANGE_ADDRESS ??
+      "0x1964C32f0bE608E7D29302AFF5E61268E72080cc") as Address;
+    const collateralToken = (process.env.TESTNET_COLLATERAL_TOKEN ??
+      process.env.COLLATERAL_TOKEN ??
+      "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC") as Address;
+
+    return {
+      chain: monadTestnet,
+      rpcUrl,
+      exchangeAddress,
+      collateralToken,
+    };
+  }
+
+  // Mainnet
+  const rpcUrl = process.env.MAINNET_RPC_URL ?? "https://rpc.monad.xyz";
+  const exchangeAddress = (process.env.MAINNET_EXCHANGE_ADDRESS ??
+    "0x34B6552d57a35a1D042CcAe1951BD1C370112a6F") as Address;
+  const collateralToken = (process.env.MAINNET_COLLATERAL_TOKEN ??
+    "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a") as Address;
 
   return {
-    chain: monadTestnet,
+    chain: monadMainnet,
     rpcUrl,
     exchangeAddress,
     collateralToken,
@@ -174,13 +214,19 @@ export function validateOperatorConfig(config: EnvConfig): asserts config is Env
 // === API Configuration ===
 
 /**
- * Default API configuration for Perpl testnet
+ * Default API configuration — derived from TESTNET_MODE
  */
-export const API_CONFIG: ApiConfig = {
-  baseUrl: process.env.TESTNET_API_URL || "https://testnet.perpl.xyz/api",
-  wsUrl: process.env.TESTNET_WS_URL || "wss://testnet.perpl.xyz",
-  chainId: 10143,
-};
+export const API_CONFIG: ApiConfig = TESTNET_MODE
+  ? {
+      baseUrl: process.env.TESTNET_API_URL || "https://testnet.perpl.xyz/api",
+      wsUrl: process.env.TESTNET_WS_URL || "wss://testnet.perpl.xyz",
+      chainId: 10143,
+    }
+  : {
+      baseUrl: process.env.MAINNET_API_URL || "https://perpl.xyz/api",
+      wsUrl: process.env.MAINNET_WS_URL || "wss://perpl.xyz",
+      chainId: 143,
+    };
 
 /**
  * Feature flag to enable/disable API usage
@@ -202,9 +248,16 @@ export const FALLBACK_CONFIG = {
  * Get API configuration from environment
  */
 export function getApiConfig(): ApiConfig {
+  if (TESTNET_MODE) {
+    return {
+      baseUrl: process.env.TESTNET_API_URL || "https://testnet.perpl.xyz/api",
+      wsUrl: process.env.TESTNET_WS_URL || "wss://testnet.perpl.xyz",
+      chainId: parseInt(process.env.TESTNET_CHAIN_ID || "10143", 10),
+    };
+  }
   return {
-    baseUrl: process.env.TESTNET_API_URL || "https://testnet.perpl.xyz/api",
-    wsUrl: process.env.TESTNET_WS_URL || "wss://testnet.perpl.xyz",
-    chainId: parseInt(process.env.TESTNET_CHAIN_ID || "10143", 10),
+    baseUrl: process.env.MAINNET_API_URL || "https://perpl.xyz/api",
+    wsUrl: process.env.MAINNET_WS_URL || "wss://perpl.xyz",
+    chainId: parseInt(process.env.MAINNET_CHAIN_ID || "143", 10),
   };
 }

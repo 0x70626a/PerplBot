@@ -15,6 +15,7 @@ import {
 import { getPositionSummary, type PositionSummary } from "../trading/positions.js";
 import type { PerplWebSocketClient } from "../api/websocket.js";
 import type { Position, Order, WalletAccount } from "../api/types.js";
+import { TESTNET_MODE } from "../config.js";
 
 /**
  * Known perpetual IDs from dex-sdk testnet config
@@ -36,6 +37,34 @@ export const PERPETUALS = {
  * All known perpetual IDs to scan
  */
 export const ALL_PERP_IDS = [16n, 32n, 48n, 64n, 256n] as const;
+
+/**
+ * Mainnet perpetual IDs from dex-sdk mainnet config
+ * Symbols are unknown at compile time — queried on-chain via getPerpetualInfo()
+ */
+export const MAINNET_PERPETUALS = {
+  PERP_1: 1n,
+  PERP_10: 10n,
+} as const;
+
+/**
+ * All known mainnet perpetual IDs to scan
+ */
+export const MAINNET_ALL_PERP_IDS = [1n, 10n] as const;
+
+/**
+ * Get active perpetuals map based on TESTNET_MODE
+ */
+export function getActivePerpetuals(): Record<string, bigint> {
+  return TESTNET_MODE ? { ...PERPETUALS } : { ...MAINNET_PERPETUALS };
+}
+
+/**
+ * Get active perpetual IDs based on TESTNET_MODE
+ */
+export function getActivePerpIds(): readonly bigint[] {
+  return TESTNET_MODE ? ALL_PERP_IDS : MAINNET_ALL_PERP_IDS;
+}
 
 /**
  * Cached exchange state
