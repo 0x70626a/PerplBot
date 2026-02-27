@@ -86,7 +86,7 @@ export function createMcpServer(): McpServer {
 
   server.tool("get_orderbook", "On-chain order book (bids/asks)",
     getOrderbookSchema,
-    async ({ market, depth }) => callBridge(() => bridge.getOrderbook(market, depth)));
+    async ({ market, depth, level }) => callBridge(() => bridge.getOrderbook(market, depth, level as 1 | 2 | 3 | undefined)));
 
   server.tool("get_recent_trades", "Recent on-chain fills",
     getRecentTradesSchema,

@@ -28,6 +28,7 @@ export const getTradingFeesSchema = {
 export const getOrderbookSchema = {
   market,
   depth: z.number().optional().describe("Levels per side (default 10)"),
+  level: z.number().optional().describe("1=top only, 2=levels (default), 3=individual orders"),
 };
 
 export const getRecentTradesSchema = {

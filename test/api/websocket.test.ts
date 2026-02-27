@@ -525,6 +525,35 @@ describe("PerplWebSocketClient", () => {
       );
     });
 
+    it("changeOrder sends correct order type with order ID", async () => {
+      const connectPromise = wsClient.connectMarketData();
+      await vi.runOnlyPendingTimersAsync();
+      await connectPromise;
+
+      vi.useRealTimers();
+
+      wsClient.changeOrder({
+        marketId: 16,
+        accountId: 100,
+        orderId: 777,
+        size: 500,
+        price: 95000,
+        leverage: 1000,
+        lastBlock: 50000,
+      });
+
+      const mockWs = (wsClient as any).ws;
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"t":7')
+      );
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"oid":777')
+      );
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining('"p":95000')
+      );
+    });
+
     it("openLong with price sends limit order", async () => {
       const connectPromise = wsClient.connectMarketData();
       await vi.runOnlyPendingTimersAsync();

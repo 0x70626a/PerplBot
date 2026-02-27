@@ -271,6 +271,33 @@ export class PerplWebSocketClient extends EventEmitter {
     });
   }
 
+  /**
+   * Change (modify) an existing order
+   */
+  changeOrder(params: {
+    marketId: number;
+    accountId: number;
+    orderId: number;
+    size: number;
+    price: number;
+    leverage: number;
+    lastBlock: number;
+    flags?: OrderFlags;
+  }): number {
+    return this.submitOrder({
+      rq: Date.now(),
+      mkt: params.marketId,
+      acc: params.accountId,
+      oid: params.orderId,
+      t: 7 as ApiOrderType, // Change
+      p: params.price,
+      s: params.size,
+      fl: params.flags ?? 0 as OrderFlags,
+      lv: params.leverage,
+      lb: params.lastBlock,
+    });
+  }
+
   // === Connection Management ===
 
   /**

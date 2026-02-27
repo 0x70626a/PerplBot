@@ -24,7 +24,9 @@
     "bot": "tsx src/bot/index.ts",
     "chatbot": "FORCE_COLOR=1 tsx src/chatbot/index.ts",
     "mcp": "tsx src/mcp/index.ts",
-    "test:api": "tsx scripts/test-api.ts"
+    "test:api": "tsx scripts/test-api.ts",
+    "viz": "cd src/visualizer && npm run dev",
+    "viz:build": "cd src/visualizer && npm run build"
   },
   "keywords": [
     "perpl",

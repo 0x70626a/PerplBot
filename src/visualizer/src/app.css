@@ -1,0 +1,29 @@
+:root {
+  --bg: #161616;
+  --bg-surface: #161616;
+  --bg-row-hover: #1e1e1e;
+  --border: #393939;
+  --text: #dde1e6;
+  --text-dim: #525252;
+  --green: #00c853;
+  --green-bg: rgba(0, 200, 83, 0.10);
+  --red: #ff1744;
+  --red-bg: rgba(255, 23, 68, 0.10);
+  --spread-bg: #1e1e1e;
+  --accent: #78a9ff;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  font-size: 13px;
+  overflow: hidden;
+}
