@@ -11,15 +11,13 @@ const TEST_DB_PATH = "./test-data/test-close-perpl.db";
 
 // Set environment before importing
 process.env.DATABASE_PATH = TEST_DB_PATH;
-process.env.OWNER_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-process.env.BOT_OPERATOR_PRIVATE_KEY = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+process.env.PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 process.env.MONAD_RPC_URL = "https://testnet-rpc.monad.xyz";
 
 import {
   initDatabase,
   closeDatabase,
   getDatabase,
-  createUser,
 } from "../../src/bot/db/index.js";
 
 // Helper to clean up database files
@@ -32,7 +30,6 @@ function cleanupDbFiles(path: string) {
 // Mock the client module
 vi.mock("../../src/bot/client.js", () => ({
   createHybridClient: vi.fn(),
-  createHybridClientForUser: vi.fn(),
 }));
 
 // Mock loadEnvConfig to avoid actual env loading issues
@@ -41,7 +38,7 @@ vi.mock("../../src/sdk/index.js", async (importOriginal) => {
   return {
     ...actual,
     loadEnvConfig: vi.fn(() => ({
-      ownerPrivateKey: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+      privateKey: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as `0x${string}`,
       chain: {
         chain: { id: 10143, name: "monad-testnet" },
         rpcUrl: "https://testnet-rpc.monad.xyz",
@@ -49,8 +46,8 @@ vi.mock("../../src/sdk/index.js", async (importOriginal) => {
         collateralToken: "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC",
       },
     })),
-    validateOwnerConfig: vi.fn(),
-    OwnerWallet: {
+    validateConfig: vi.fn(),
+    Wallet: {
       fromPrivateKey: vi.fn(() => ({
         address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
       })),
@@ -159,63 +156,6 @@ describe("Close Handlers", () => {
       await handleClosePosition(ctx, "eth");
 
       expect(replyMock).toHaveBeenNthCalledWith(2, "No ETH position to close\\.", { parse_mode: "MarkdownV2" });
-    });
-
-    it("should close position in multi-user mode", async () => {
-      const { createHybridClientForUser } = await import("../../src/bot/client.js");
-      const { handleClosePosition } = await import("../../src/bot/handlers/close.js");
-
-      createUser({
-        telegramId: 123456,
-        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
-        delegatedAccount: "0xabcdef1234567890abcdef1234567890abcdef12",
-        isActive: true,
-        isBanned: false,
-      });
-
-      const mockClient = {
-        getAccountByAddress: vi.fn().mockResolvedValue({
-          accountId: 5n,
-          balanceCNS: 500000000n,
-        }),
-        getPosition: vi.fn().mockResolvedValue({
-          position: {
-            lotLNS: 200000000000n,
-            positionType: 1, // Short
-            pricePNS: 3000000000000n,
-            pnlCNS: 100000n,
-          },
-          markPrice: 2900000000000n,
-        }),
-        getPerpetualInfo: vi.fn().mockResolvedValue({
-          priceDecimals: 9,
-          lotDecimals: 9,
-        }),
-        execOrder: vi.fn().mockResolvedValue("0xmultiusertxhash456"),
-      };
-
-      (createHybridClientForUser as any).mockResolvedValue(mockClient);
-
-      const replyMock = vi.fn();
-      const ctx = {
-        user: {
-          telegramId: 123456,
-          walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
-          delegatedAccount: "0xabcdef1234567890abcdef1234567890abcdef12",
-          isActive: true,
-          isBanned: false,
-        },
-        reply: replyMock,
-      } as any;
-
-      await handleClosePosition(ctx, "eth");
-
-      expect(createHybridClientForUser).toHaveBeenCalledWith(ctx.user);
-      expect(replyMock).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining("ETH Position Closed"),
-        expect.objectContaining({ parse_mode: "MarkdownV2" })
-      );
     });
 
     it("should handle no exchange account error", async () => {
@@ -338,66 +278,6 @@ describe("Close Handlers", () => {
       // Should only query SOL market (perpId 48)
       expect(mockClient.getOpenOrders).toHaveBeenCalledWith(48n, 1n);
       expect(mockClient.getPosition).toHaveBeenCalledWith(48n, 1n);
-    });
-
-    it("should close all in multi-user mode", async () => {
-      const { createHybridClientForUser } = await import("../../src/bot/client.js");
-      const { handleCloseAll } = await import("../../src/bot/handlers/close.js");
-
-      createUser({
-        telegramId: 789012,
-        walletAddress: "0xaabbccdd1234567890abcdef1234567890abcdef",
-        delegatedAccount: "0xdeadbeef1234567890abcdef1234567890abcdef",
-        isActive: true,
-        isBanned: false,
-      });
-
-      const mockClient = {
-        getAccountByAddress: vi.fn().mockResolvedValue({
-          accountId: 10n,
-          balanceCNS: 2000000000n,
-        }),
-        getOpenOrders: vi.fn().mockResolvedValue([
-          { orderId: 5n, orderType: 0, priceONS: 80000, lotLNS: 2000n, leverageHdths: 500 },
-        ]),
-        getPosition: vi.fn().mockResolvedValue({
-          position: {
-            lotLNS: 0n, // No position
-            positionType: 0,
-            pricePNS: 0n,
-            pnlCNS: 0n,
-          },
-          markPrice: 0n,
-        }),
-        getPerpetualInfo: vi.fn().mockResolvedValue({
-          priceDecimals: 9,
-          lotDecimals: 9,
-        }),
-        execOrder: vi.fn().mockResolvedValue("0xmultiusercloseall"),
-      };
-
-      (createHybridClientForUser as any).mockResolvedValue(mockClient);
-
-      const replyMock = vi.fn();
-      const ctx = {
-        user: {
-          telegramId: 789012,
-          walletAddress: "0xaabbccdd1234567890abcdef1234567890abcdef",
-          delegatedAccount: "0xdeadbeef1234567890abcdef1234567890abcdef",
-          isActive: true,
-          isBanned: false,
-        },
-        reply: replyMock,
-      } as any;
-
-      await handleCloseAll(ctx);
-
-      expect(createHybridClientForUser).toHaveBeenCalledWith(ctx.user);
-      expect(replyMock).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining("Close All Complete"),
-        expect.objectContaining({ parse_mode: "MarkdownV2" })
-      );
     });
 
     it("should handle no exchange account error", async () => {

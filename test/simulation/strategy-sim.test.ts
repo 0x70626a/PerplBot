@@ -133,7 +133,7 @@ describe("Strategy simulation config validation", () => {
     const { runStrategySimulation } = await import("../../src/sdk/simulation/strategy-sim.js");
     const config = {
       chain: { chain: {} as any, rpcUrl: "http://localhost:8545", exchangeAddress: "0x1" as any, collateralToken: "0x2" as any },
-      ownerPrivateKey: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as `0x${string}`,
+      privateKey: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as `0x${string}`,
     };
     await expect(
       runStrategySimulation(config, { strategyType: "grid", perpId: 16n })
@@ -144,14 +144,14 @@ describe("Strategy simulation config validation", () => {
     const { runStrategySimulation } = await import("../../src/sdk/simulation/strategy-sim.js");
     const config = {
       chain: { chain: {} as any, rpcUrl: "http://localhost:8545", exchangeAddress: "0x1" as any, collateralToken: "0x2" as any },
-      ownerPrivateKey: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as `0x${string}`,
+      privateKey: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as `0x${string}`,
     };
     await expect(
       runStrategySimulation(config, { strategyType: "mm", perpId: 16n })
     ).rejects.toThrow("MM config is required");
   });
 
-  it("should reject when OWNER_PRIVATE_KEY is missing", async () => {
+  it("should reject when PRIVATE_KEY is missing", async () => {
     const { runStrategySimulation } = await import("../../src/sdk/simulation/strategy-sim.js");
     const config = {
       chain: { chain: {} as any, rpcUrl: "http://localhost:8545", exchangeAddress: "0x1" as any, collateralToken: "0x2" as any },
@@ -162,7 +162,7 @@ describe("Strategy simulation config validation", () => {
         perpId: 16n,
         grid: { gridLevels: 3, gridSpacing: 100, orderSize: 0.001, leverage: 2 },
       })
-    ).rejects.toThrow("OWNER_PRIVATE_KEY is required");
+    ).rejects.toThrow("PRIVATE_KEY is required");
   });
 });
 

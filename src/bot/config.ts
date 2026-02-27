@@ -3,7 +3,6 @@
  */
 
 import type { Context, MiddlewareFn } from "telegraf";
-import { privateKeyToAddress } from "viem/accounts";
 
 /**
  * Bot configuration from environment
@@ -14,10 +13,6 @@ export interface BotConfig {
   allowedUserId?: number;
   /** Multi-user mode enabled */
   multiUser: boolean;
-  /** Bot operator private key (for trading on users' accounts) */
-  operatorPrivateKey?: `0x${string}`;
-  /** Bot operator address (derived from private key) */
-  operatorAddress?: `0x${string}`;
 }
 
 /**
@@ -48,37 +43,14 @@ export function loadBotConfig(): BotConfig {
     );
   }
 
-  // Multi-user mode - requires BOT_OPERATOR_PRIVATE_KEY
-  let operatorPrivateKey: `0x${string}` | undefined;
-  let operatorAddress: `0x${string}` | undefined;
-
   if (multiUser) {
-    const opKey = process.env.BOT_OPERATOR_PRIVATE_KEY;
-    if (!opKey) {
-      throw new Error(
-        "BOT_OPERATOR_PRIVATE_KEY is required for multi-user mode"
-      );
-    }
-
-    operatorPrivateKey = opKey.startsWith("0x")
-      ? (opKey as `0x${string}`)
-      : (`0x${opKey}` as `0x${string}`);
-
-    operatorAddress = privateKeyToAddress(operatorPrivateKey);
-
-    // Also set BOT_OPERATOR_ADDRESS for convenience
-    process.env.BOT_OPERATOR_ADDRESS = operatorAddress;
-
     console.log(`[CONFIG] Multi-user mode enabled`);
-    console.log(`[CONFIG] Bot operator address: ${operatorAddress}`);
   }
 
   return {
     token,
     allowedUserId,
     multiUser,
-    operatorPrivateKey,
-    operatorAddress,
   };
 }
 

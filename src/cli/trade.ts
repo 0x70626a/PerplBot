@@ -1,12 +1,12 @@
 /**
- * Trade command - Direct trading from owner wallet on Exchange
+ * Trade command - Direct trading on Exchange
  */
 
 import type { Command } from "commander";
 import {
   loadEnvConfig,
-  validateOwnerConfig,
-  OwnerWallet,
+  validateConfig,
+  Wallet,
   Exchange,
   HybridClient,
   PERPETUALS,
@@ -53,7 +53,7 @@ function resolvePerpId(perp: string): bigint {
 export function registerTradeCommand(program: Command): void {
   const trade = program
     .command("trade")
-    .description("Execute trades directly from owner wallet");
+    .description("Execute trades");
 
   // Open position
   trade
@@ -69,17 +69,17 @@ export function registerTradeCommand(program: Command): void {
     .option("--dry-run", "Simulate trade on forked chain without sending")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient,
-        owner.walletClient
+        wallet.publicClient,
+        wallet.walletClient
       );
       const client = new HybridClient({ exchange });
 
@@ -101,7 +101,7 @@ export function registerTradeCommand(program: Command): void {
 
       if (isMarketOrder) {
         // Fetch current mark price
-        const accountInfo = await client.getAccountByAddress(owner.address);
+        const accountInfo = await client.getAccountByAddress(wallet.address);
         const { markPrice } = await client.getPosition(perpId, accountInfo.accountId);
         const currentPrice = pnsToPrice(markPrice, priceDecimals);
 
@@ -181,17 +181,17 @@ export function registerTradeCommand(program: Command): void {
     .option("--dry-run", "Simulate trade on forked chain without sending")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient,
-        owner.walletClient
+        wallet.publicClient,
+        wallet.walletClient
       );
       const client = new HybridClient({ exchange });
 
@@ -260,17 +260,17 @@ export function registerTradeCommand(program: Command): void {
     .requiredOption("--order-id <id>", "Order ID to cancel")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient,
-        owner.walletClient
+        wallet.publicClient,
+        wallet.walletClient
       );
       const client = new HybridClient({ exchange });
 
@@ -313,21 +313,21 @@ export function registerTradeCommand(program: Command): void {
     .requiredOption("--perp <name>", "Perpetual (btc, eth, sol, mon, zec)")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient,
-        owner.walletClient
+        wallet.publicClient,
+        wallet.walletClient
       );
       const client = new HybridClient({ exchange });
 
-      const accountInfo = await client.getAccountByAddress(owner.address);
+      const accountInfo = await client.getAccountByAddress(wallet.address);
       const accountId = accountInfo.accountId;
 
       const perpId = resolvePerpId(options.perp);
@@ -385,17 +385,17 @@ export function registerTradeCommand(program: Command): void {
     .requiredOption("--amount <amount>", "USD amount to add")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient,
-        owner.walletClient
+        wallet.publicClient,
+        wallet.walletClient
       );
 
       const perpId = resolvePerpId(options.perp);
@@ -422,17 +422,17 @@ export function registerTradeCommand(program: Command): void {
     .requiredOption("--amount <amount>", "USD amount to remove")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient,
-        owner.walletClient
+        wallet.publicClient,
+        wallet.walletClient
       );
 
       const perpId = resolvePerpId(options.perp);
@@ -459,21 +459,21 @@ export function registerTradeCommand(program: Command): void {
     .option("--perp <name>", "Specific market only (btc, eth, sol, mon, zec)")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient,
-        owner.walletClient
+        wallet.publicClient,
+        wallet.walletClient
       );
       const client = new HybridClient({ exchange });
 
-      const accountInfo = await client.getAccountByAddress(owner.address);
+      const accountInfo = await client.getAccountByAddress(wallet.address);
       const accountId = accountInfo.accountId;
 
       if (accountId === 0n) {

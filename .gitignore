@@ -28,6 +28,10 @@ npm-debug.log*
 # Test coverage
 coverage/
 
+# Visualizer
+src/visualizer/node_modules/
+src/visualizer/dist/
+
 # Video files
 *.mov
 *.mp4

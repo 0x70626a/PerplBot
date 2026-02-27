@@ -5,8 +5,8 @@
 import type { BotContext } from "../types.js";
 import {
   loadEnvConfig,
-  validateOwnerConfig,
-  OwnerWallet,
+  validateConfig,
+  Wallet,
   PERPETUALS,
 } from "../../sdk/index.js";
 import { OrderType, type OrderDesc } from "../../sdk/contracts/Exchange.js";
@@ -41,9 +41,9 @@ const ORDER_TYPE_NAMES: Record<number, string> = {
  */
 export async function fetchOpenOrders(market: Market): Promise<OpenOrder[]> {
   const config = loadEnvConfig();
-  validateOwnerConfig(config);
+  validateConfig(config);
 
-  const owner = OwnerWallet.fromPrivateKey(config.ownerPrivateKey, config.chain);
+  const wallet = Wallet.fromPrivateKey(config.privateKey, config.chain);
 
   console.log("[CANCEL] Creating HybridClient...");
   const client = await createHybridClient({ withWalletClient: true });
@@ -51,7 +51,7 @@ export async function fetchOpenOrders(market: Market): Promise<OpenOrder[]> {
   const perpId = PERP_NAMES[market];
 
   // Get account
-  const accountInfo = await client.getAccountByAddress(owner.address);
+  const accountInfo = await client.getAccountByAddress(wallet.address);
   if (accountInfo.accountId === 0n) {
     return [];
   }
@@ -158,9 +158,9 @@ export async function cancelAllOrders(market: Market): Promise<{
   total: number;
 }> {
   const config = loadEnvConfig();
-  validateOwnerConfig(config);
+  validateConfig(config);
 
-  const owner = OwnerWallet.fromPrivateKey(config.ownerPrivateKey, config.chain);
+  const wallet = Wallet.fromPrivateKey(config.privateKey, config.chain);
 
   console.log(`[CANCEL] Cancelling all ${market} orders...`);
   const client = await createHybridClient({ withWalletClient: true });
@@ -168,7 +168,7 @@ export async function cancelAllOrders(market: Market): Promise<{
   const perpId = PERP_NAMES[market];
 
   // Get account
-  const accountInfo = await client.getAccountByAddress(owner.address);
+  const accountInfo = await client.getAccountByAddress(wallet.address);
   if (accountInfo.accountId === 0n) {
     return { cancelled: 0, total: 0 };
   }

@@ -2,16 +2,13 @@
  * Close handlers - Close positions and cancel orders
  * "close position" - closes a specific market position
  * "close all" - cancels all orders and closes all positions
- *
- * Supports both single-user (owner wallet) and multi-user (delegated account) modes.
  */
 
 import type { BotContext } from "../types.js";
-import type { User } from "../db/schema.js";
 import {
   loadEnvConfig,
-  validateOwnerConfig,
-  OwnerWallet,
+  validateConfig,
+  Wallet,
   PERPETUALS,
   ALL_PERP_IDS,
   priceToPNS,
@@ -20,9 +17,8 @@ import {
 import { OrderType, type OrderDesc } from "../../sdk/contracts/Exchange.js";
 import type { Market } from "../../cli/tradeParser.js";
 import { formatError } from "../formatters/telegram.js";
-import { createHybridClient, createHybridClientForUser } from "../client.js";
+import { createHybridClient } from "../client.js";
 import type { HybridClient } from "../../sdk/index.js";
-import type { Address } from "viem";
 
 // Market name to ID mapping
 const PERP_NAMES: Record<string, bigint> = {
@@ -49,60 +45,28 @@ function escapeMarkdown(text: string): string {
 }
 
 /**
- * Close a position on a specific market (single-user mode)
+ * Close a position on a specific market
  */
-async function closePositionSingleUser(market: Market): Promise<{
+async function closePositionForWallet(market: Market): Promise<{
   success: boolean;
   txHash?: string;
   error?: string;
   noPosition?: boolean;
 }> {
   try {
-    console.log(`[CLOSE] Closing ${market} position (single-user)...`);
+    console.log(`[CLOSE] Closing ${market} position...`);
     const client = await createHybridClient({ withWalletClient: true });
 
     const config = loadEnvConfig();
-    validateOwnerConfig(config);
-    const owner = OwnerWallet.fromPrivateKey(config.ownerPrivateKey, config.chain);
+    validateConfig(config);
+    const wallet = Wallet.fromPrivateKey(config.privateKey, config.chain);
 
     const perpId = PERP_NAMES[market];
 
     // Get account
-    const accountInfo = await client.getAccountByAddress(owner.address);
+    const accountInfo = await client.getAccountByAddress(wallet.address);
     if (accountInfo.accountId === 0n) {
       return { success: false, error: "No exchange account found" };
-    }
-
-    return await closePositionForAccount(client, perpId, accountInfo.accountId);
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[CLOSE] Error closing position: ${errorMsg}`);
-    return { success: false, error: errorMsg };
-  }
-}
-
-/**
- * Close a position on a specific market (multi-user mode)
- */
-async function closePositionMultiUser(
-  user: User,
-  market: Market
-): Promise<{
-  success: boolean;
-  txHash?: string;
-  error?: string;
-  noPosition?: boolean;
-}> {
-  try {
-    console.log(`[CLOSE] Closing ${market} position for user ${user.telegramId}...`);
-    const client = await createHybridClientForUser(user);
-
-    const perpId = PERP_NAMES[market];
-
-    // Get account by delegated account address
-    const accountInfo = await client.getAccountByAddress(user.delegatedAccount as Address);
-    if (accountInfo.accountId === 0n) {
-      return { success: false, error: "No exchange account found for your DelegatedAccount" };
     }
 
     return await closePositionForAccount(client, perpId, accountInfo.accountId);
@@ -177,14 +141,7 @@ export async function handleClosePosition(ctx: BotContext, market: Market): Prom
   try {
     await ctx.reply(`Closing ${market.toUpperCase()} position...`);
 
-    let result;
-    if (ctx.user?.delegatedAccount) {
-      // Multi-user mode
-      result = await closePositionMultiUser(ctx.user, market);
-    } else {
-      // Single-user mode
-      result = await closePositionSingleUser(market);
-    }
+    const result = await closePositionForWallet(market);
 
     if (result.noPosition) {
       await ctx.reply(`No ${market.toUpperCase()} position to close\\.`, { parse_mode: "MarkdownV2" });
@@ -203,48 +160,25 @@ export async function handleClosePosition(ctx: BotContext, market: Market): Prom
 }
 
 /**
- * Close all positions and cancel all orders (single-user mode)
+ * Close all positions and cancel all orders
  */
-async function closeAllSingleUser(specificMarket?: Market): Promise<{
+async function closeAllForWallet(specificMarket?: Market): Promise<{
   ordersCancelled: number;
   positionsClosed: number;
   errors: string[];
 }> {
   const config = loadEnvConfig();
-  validateOwnerConfig(config);
+  validateConfig(config);
 
-  const owner = OwnerWallet.fromPrivateKey(config.ownerPrivateKey, config.chain);
+  const wallet = Wallet.fromPrivateKey(config.privateKey, config.chain);
 
-  console.log(`[CLOSE] Closing all ${specificMarket || "positions"} (single-user)...`);
+  console.log(`[CLOSE] Closing all ${specificMarket || "positions"}...`);
   const client = await createHybridClient({ withWalletClient: true });
 
   // Get account
-  const accountInfo = await client.getAccountByAddress(owner.address);
+  const accountInfo = await client.getAccountByAddress(wallet.address);
   if (accountInfo.accountId === 0n) {
     return { ordersCancelled: 0, positionsClosed: 0, errors: ["No exchange account found"] };
-  }
-
-  return await closeAllForAccount(client, accountInfo.accountId, specificMarket);
-}
-
-/**
- * Close all positions and cancel all orders (multi-user mode)
- */
-async function closeAllMultiUser(
-  user: User,
-  specificMarket?: Market
-): Promise<{
-  ordersCancelled: number;
-  positionsClosed: number;
-  errors: string[];
-}> {
-  console.log(`[CLOSE] Closing all ${specificMarket || "positions"} for user ${user.telegramId}...`);
-  const client = await createHybridClientForUser(user);
-
-  // Get account by delegated account address
-  const accountInfo = await client.getAccountByAddress(user.delegatedAccount as Address);
-  if (accountInfo.accountId === 0n) {
-    return { ordersCancelled: 0, positionsClosed: 0, errors: ["No exchange account found for your DelegatedAccount"] };
   }
 
   return await closeAllForAccount(client, accountInfo.accountId, specificMarket);
@@ -364,14 +298,7 @@ export async function handleCloseAll(ctx: BotContext, market?: Market): Promise<
     const scope = market ? `${market.toUpperCase()}` : "all markets";
     await ctx.reply(`Closing everything on ${scope}...`);
 
-    let result;
-    if (ctx.user?.delegatedAccount) {
-      // Multi-user mode
-      result = await closeAllMultiUser(ctx.user, market);
-    } else {
-      // Single-user mode
-      result = await closeAllSingleUser(market);
-    }
+    const result = await closeAllForWallet(market);
 
     const lines: string[] = [];
     lines.push("*Close All Complete*");

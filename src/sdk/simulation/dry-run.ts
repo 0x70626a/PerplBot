@@ -219,7 +219,7 @@ async function runForkSimulation(
   exchangeAddress: Address,
   orderDesc: OrderDesc,
 ): Promise<ForkResult> {
-  const privateKey = config.ownerPrivateKey!;
+  const privateKey = config.privateKey!;
   const account = privateKeyToAccount(privateKey);
   const rpcUrl = config.chain.rpcUrl;
 
@@ -343,7 +343,7 @@ export async function simulateTrade(
   orderDesc: OrderDesc,
 ): Promise<DryRunResult> {
   const exchangeAddress = config.chain.exchangeAddress;
-  const account = privateKeyToAccount(config.ownerPrivateKey!);
+  const account = privateKeyToAccount(config.privateKey!);
 
   // Create client pointing at live RPC for eth_call simulation
   const publicClient = createPublicClient({

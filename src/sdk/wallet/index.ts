@@ -1,3 +1,2 @@
-export * from "./owner.js";
-export * from "./operator.js";
+export * from "./wallet.js";
 export * from "./keyManager.js";

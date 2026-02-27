@@ -80,10 +80,10 @@ export function getChainConfig(): ChainConfig {
     const rpcUrl = process.env.TESTNET_RPC_URL ?? "https://testnet-rpc.monad.xyz";
     const exchangeAddress = (process.env.TESTNET_EXCHANGE_ADDRESS ??
       process.env.EXCHANGE_ADDRESS ??
-      "0x1964C32f0bE608E7D29302AFF5E61268E72080cc") as Address;
+      "0x9c216d1ab3e0407b3d6f1d5e9effe6d01c326ab7") as Address;
     const collateralToken = (process.env.TESTNET_COLLATERAL_TOKEN ??
       process.env.COLLATERAL_TOKEN ??
-      "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC") as Address;
+      "0xdf5b718d8fcc173335185a2a1513ee8151e3c027") as Address;
 
     return {
       chain: monadTestnet,
@@ -109,12 +109,13 @@ export function getChainConfig(): ChainConfig {
 }
 
 /**
- * Get owner private key from environment
+ * Get private key from environment
+ * Checks PRIVATE_KEY first, falls back to OWNER_PRIVATE_KEY for migration
  */
-export function getOwnerPrivateKey(): `0x${string}` {
-  const key = process.env.OWNER_PRIVATE_KEY;
+export function getPrivateKey(): `0x${string}` {
+  const key = process.env.PRIVATE_KEY ?? process.env.OWNER_PRIVATE_KEY;
   if (!key) {
-    throw new Error("OWNER_PRIVATE_KEY environment variable is required");
+    throw new Error("PRIVATE_KEY (or OWNER_PRIVATE_KEY) environment variable is required");
   }
   if (!key.startsWith("0x")) {
     return `0x${key}` as `0x${string}`;
@@ -122,37 +123,17 @@ export function getOwnerPrivateKey(): `0x${string}` {
   return key as `0x${string}`;
 }
 
-/**
- * Get operator private key from environment
- */
-export function getOperatorPrivateKey(): `0x${string}` {
-  const key = process.env.OPERATOR_PRIVATE_KEY;
-  if (!key) {
-    throw new Error("OPERATOR_PRIVATE_KEY environment variable is required");
-  }
-  if (!key.startsWith("0x")) {
-    return `0x${key}` as `0x${string}`;
-  }
-  return key as `0x${string}`;
-}
-
-/**
- * Get delegated account address from environment (optional)
- */
-export function getDelegatedAccountAddress(): Address | undefined {
-  const address = process.env.DELEGATED_ACCOUNT_ADDRESS;
-  if (!address) return undefined;
-  return address as Address;
-}
+/** @deprecated Use getPrivateKey() instead */
+export const getOwnerPrivateKey = getPrivateKey;
 
 /**
  * Full environment configuration
  */
 export interface EnvConfig {
   chain: ChainConfig;
+  privateKey?: `0x${string}`;
+  /** @deprecated Use privateKey instead */
   ownerPrivateKey?: `0x${string}`;
-  operatorPrivateKey?: `0x${string}`;
-  delegatedAccountAddress?: Address;
 }
 
 /**
@@ -162,54 +143,34 @@ export interface EnvConfig {
 export function loadEnvConfig(): EnvConfig {
   const chain = getChainConfig();
 
-  let ownerPrivateKey: `0x${string}` | undefined;
-  let operatorPrivateKey: `0x${string}` | undefined;
+  let privateKey: `0x${string}` | undefined;
 
   try {
-    ownerPrivateKey = getOwnerPrivateKey();
+    privateKey = getPrivateKey();
   } catch {
-    // Owner key not configured
-  }
-
-  try {
-    operatorPrivateKey = getOperatorPrivateKey();
-  } catch {
-    // Operator key not configured
+    // Key not configured
   }
 
   return {
     chain,
-    ownerPrivateKey,
-    operatorPrivateKey,
-    delegatedAccountAddress: getDelegatedAccountAddress(),
+    privateKey,
+    ownerPrivateKey: privateKey, // backwards compatibility
   };
 }
 
 /**
- * Validate that required config is present for owner operations
+ * Validate that required config is present for trading operations
  */
-export function validateOwnerConfig(config: EnvConfig): asserts config is EnvConfig & {
-  ownerPrivateKey: `0x${string}`;
+export function validateConfig(config: EnvConfig): asserts config is EnvConfig & {
+  privateKey: `0x${string}`;
 } {
-  if (!config.ownerPrivateKey) {
-    throw new Error("OWNER_PRIVATE_KEY is required for owner operations");
+  if (!config.privateKey) {
+    throw new Error("PRIVATE_KEY is required for trading operations");
   }
 }
 
-/**
- * Validate that required config is present for operator operations
- */
-export function validateOperatorConfig(config: EnvConfig): asserts config is EnvConfig & {
-  operatorPrivateKey: `0x${string}`;
-  delegatedAccountAddress: Address;
-} {
-  if (!config.operatorPrivateKey) {
-    throw new Error("OPERATOR_PRIVATE_KEY is required for operator operations");
-  }
-  if (!config.delegatedAccountAddress) {
-    throw new Error("DELEGATED_ACCOUNT_ADDRESS is required for operator operations");
-  }
-}
+/** @deprecated Use validateConfig() instead */
+export const validateOwnerConfig = validateConfig;
 
 // === API Configuration ===
 

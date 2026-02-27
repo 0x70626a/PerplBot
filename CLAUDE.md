@@ -17,7 +17,7 @@ npm run build
 # Run CLI in development
 npm run dev -- <command>
 
-# Run tests (584+ tests)
+# Run tests (590+ tests)
 npm test
 
 # Run tests in watch mode
@@ -26,28 +26,22 @@ npm run test:watch
 
 ## Overview
 
-PerplBot is a TypeScript SDK and CLI for building trading bots on Perpl. It implements the **owner/operator wallet pattern** using the `delegated-account` smart contract, allowing secure separation between cold storage (owner) and hot trading wallets (operator).
-
-**Key security feature**: Operators can NEVER withdraw funds - this is enforced at the smart contract level.
+PerplBot is a TypeScript SDK and CLI for building trading bots on Perpl (perpetual DEX on Monad). It uses a **single wallet** that trades directly on the Exchange contract — no proxy contracts or multi-wallet patterns.
 
 ## Bot Modes
 
-### Single-User Mode (Legacy)
-Set `TELEGRAM_USER_ID` to restrict bot to one user. Uses `OWNER_PRIVATE_KEY` for all operations.
+### Single-User Mode
+Set `TELEGRAM_USER_ID` to restrict bot to one user. Uses `PRIVATE_KEY` for all operations.
 
 ### Multi-User Mode
 Set `MULTI_USER_MODE=true` to enable multi-user support:
 - Users link wallets via `/link` and signature verification
-- Users set their DelegatedAccount via `/setaccount`
-- Bot operator key (`BOT_OPERATOR_PRIVATE_KEY`) must be added as operator on each user's DelegatedAccount
-- Bot can trade on behalf of users but CANNOT withdraw (enforced by smart contract)
+- Bot uses `PRIVATE_KEY` for trading
 
 **Environment Variables for Multi-User:**
 ```bash
 MULTI_USER_MODE=true
-BOT_OPERATOR_PRIVATE_KEY=0x...  # Bot's operator wallet (added to users' accounts)
 DATABASE_PATH=./data/perpl.db  # SQLite database for user storage
-IMPLEMENTATION_ADDRESS=0x...  # Optional: DelegatedAccount implementation address (for /deploy)
 ```
 
 ### Testnet Configuration
@@ -56,8 +50,8 @@ All contract addresses and RPC URLs default to Monad Testnet. Override with envi
 ```bash
 TESTNET_MODE=true  # Defaults to true (testnet only supported currently)
 TESTNET_RPC_URL=https://testnet-rpc.monad.xyz
-TESTNET_EXCHANGE_ADDRESS=0x1964C32f0bE608E7D29302AFF5E61268E72080cc
-TESTNET_COLLATERAL_TOKEN=0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC
+TESTNET_EXCHANGE_ADDRESS=0x9c216d1ab3e0407b3d6f1d5e9effe6d01c326ab7
+TESTNET_COLLATERAL_TOKEN=0xdf5b718d8fcc173335185a2a1513ee8151e3c027
 TESTNET_CHAIN_ID=10143
 TESTNET_API_URL=https://testnet.perpl.xyz/api
 TESTNET_WS_URL=wss://testnet.perpl.xyz
@@ -72,11 +66,9 @@ PerplBot/
 │   │   ├── contracts/          # Contract ABIs & wrappers
 │   │   │   ├── abi.ts          # All contract ABIs (incl. 179 error defs)
 │   │   │   ├── errors.ts       # Error decoding utility
-│   │   │   ├── DelegatedAccount.ts
 │   │   │   └── Exchange.ts
 │   │   ├── wallet/             # Wallet management
-│   │   │   ├── owner.ts        # Owner (cold) wallet
-│   │   │   ├── operator.ts     # Operator (hot) wallet
+│   │   │   ├── wallet.ts       # Unified wallet (WS-first trading)
 │   │   │   └── keyManager.ts   # Secure key storage
 │   │   ├── trading/            # Trading utilities
 │   │   │   ├── orders.ts       # Order construction
@@ -100,7 +92,6 @@ PerplBot/
 │   │   ├── config.ts           # Environment config
 │   │   └── index.ts            # SDK exports
 │   ├── cli/                    # CLI commands
-│   │   ├── deploy.ts           # Deploy DelegatedAccount
 │   │   ├── trade.ts            # Execute trades
 │   │   ├── manage.ts           # Account management
 │   │   ├── simulate.ts         # Strategy dry-run simulation
@@ -144,11 +135,9 @@ PerplBot/
 ## Supported Operations
 
 ### Wallet Management
-- Create cold (owner) wallet
-- Create hot (operator) wallet
-- Encrypted key storage with password
+- Encrypted key storage with password (KeyManager)
 
-### Trading (Operator)
+### Trading
 - Market open long/short (IOC)
 - Limit open long/short
 - Market close long/short
@@ -164,9 +153,7 @@ PerplBot/
   - Mini orderbook (ASK/BID spread, open interest)
   - Price scale diagram (entry, mark, estimated liquidation)
 
-### Account Management (Owner)
-- Deploy DelegatedAccount
-- Add/remove operators
+### Account Management
 - Deposit/withdraw collateral
 
 ### Portfolio Queries
@@ -193,14 +180,14 @@ PerplBot/
 
 ## Key Concepts
 
-### Owner/Operator Pattern
-- **Owner**: Cold wallet that owns the DelegatedAccount. Can withdraw funds, add/remove operators.
-- **Operator**: Hot wallet for trading. Can only call allowlisted Exchange functions. CANNOT WITHDRAW.
-- **DelegatedAccount**: Smart contract that enforces access control and forwards calls to Exchange.
+### Single Wallet Architecture
+- **Wallet**: Single wallet that trades directly on the Exchange contract
+- WebSocket-first order submission with RPC fallback
+- Supports all trading operations: open, close, cancel, modify, margin, withdraw
 
 ### Contract Addresses (Monad Testnet)
-- Exchange: `0x1964C32f0bE608E7D29302AFF5E61268E72080cc`
-- Collateral (USD stable): `0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`
+- Exchange: `0x9c216d1ab3e0407b3d6f1d5e9effe6d01c326ab7`
+- Collateral (USD stable): `0xdf5b718d8fcc173335185a2a1513ee8151e3c027`
 
 ### Perpetual IDs (from dex-sdk testnet config)
 - BTC: 16
@@ -233,12 +220,18 @@ npm run dev -- manage status
 npm run dev -- manage deposit --amount 100
 ```
 
-## CLI Commands
+## Environment Variables
 
-### Deploy New Account
 ```bash
-npm run dev -- deploy --implementation <addr> --operator <hot-wallet> --deposit 100
+PRIVATE_KEY=0x...              # Wallet private key (required for trading)
+TESTNET_MODE=true              # Defaults to true
+TELEGRAM_BOT_TOKEN=...         # Telegram bot token
+TELEGRAM_USER_ID=...           # Single-user mode restriction
+MULTI_USER_MODE=true           # Enable multi-user Telegram bot
+DATABASE_PATH=./data/perpl.db  # SQLite database path
 ```
+
+## CLI Commands
 
 ### Execute Trade
 ```bash
@@ -271,8 +264,7 @@ npm run dev -- manage status
 ```typescript
 import {
   KeyManager,
-  OwnerWallet,
-  OperatorWallet,
+  Wallet,
   Portfolio,
   getChainConfig,
   priceToPNS,
@@ -284,22 +276,22 @@ import {
 const keyManager = new KeyManager("./.perpl/keys");
 const { address } = keyManager.createHotWallet("password");
 
-// Setup operator
+// Setup wallet
 const config = getChainConfig();
-const operator = OperatorWallet.fromPrivateKey(key, config);
-operator.connect(exchangeAddr, delegatedAccountAddr);
+const wallet = Wallet.fromPrivateKey(key, config);
+const exchange = wallet.connect(exchangeAddr);
 
 // Market order
-await operator.marketOpenLong({
-  perpId: 0n,
+await wallet.marketOpenLong({
+  perpId: 16n,
   lotLNS: lotToLNS(0.1),
   leverageHdths: leverageToHdths(10),
   maxPricePNS: priceToPNS(46000),
 });
 
 // Portfolio queries
-const portfolio = new Portfolio(exchange, publicClient, exchangeAddr);
-portfolio.setAccountId(accountId);
+const portfolio = new Portfolio(exchange, wallet.publicClient, exchangeAddr);
+await portfolio.setAccountByAddress(wallet.address);
 const positions = await portfolio.getPositions();
 ```
 
@@ -409,12 +401,11 @@ The `/reviewer` skill performs comprehensive code review with a senior engineer 
 
 **Verification Gate:**
 - `npm run typecheck` passes
-- `npm test` passes (584+ tests)
+- `npm test` passes (590+ tests)
 - No P0 or P1 issues remain
 - "Would a staff engineer approve this?"
 
 ## References
 
 - [api-docs](https://github.com/PerplFoundation/api-docs) — Perpl REST & WebSocket API documentation
-- [delegated-account](https://github.com/PerplFoundation/delegated-account) — Owner/operator smart contract
 - [dex-sdk](https://github.com/PerplFoundation/dex-sdk) — Perpl exchange SDK and ABIs

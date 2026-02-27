@@ -1,13 +1,13 @@
 /**
- * Manage command - Direct account management from owner wallet
+ * Manage command - Account management
  * Uses HybridClient for API-first reads with contract fallback
  */
 
 import type { Command } from "commander";
 import {
   loadEnvConfig,
-  validateOwnerConfig,
-  OwnerWallet,
+  validateConfig,
+  Wallet,
   Exchange,
   HybridClient,
   PERPETUALS,
@@ -23,7 +23,7 @@ import { ERC20Abi, ExchangeAbi } from "../sdk/contracts/abi.js";
 export function registerManageCommand(program: Command): void {
   const manage = program
     .command("manage")
-    .description("Account management (direct owner wallet)");
+    .description("Account management");
 
   // Account status
   manage
@@ -31,14 +31,14 @@ export function registerManageCommand(program: Command): void {
     .description("Show account status and positions")
     .action(async () => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
       // Get global options from parent
       const globalOpts = program.opts();
       const useApi = globalOpts.api !== false && USE_API;
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
@@ -50,8 +50,8 @@ export function registerManageCommand(program: Command): void {
 
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient,
-        owner.walletClient
+        wallet.publicClient,
+        wallet.walletClient
       );
       const client = new HybridClient({ exchange, apiClient });
 
@@ -59,36 +59,36 @@ export function registerManageCommand(program: Command): void {
       console.log(`Mode: ${client.isApiEnabled() ? "API + Contract" : "Contract only"}\n`);
 
       try {
-        // Get account by owner address
+        // Get account by address
         let accountInfo;
         try {
-          accountInfo = await client.getAccountByAddress(owner.address);
+          accountInfo = await client.getAccountByAddress(wallet.address);
         } catch {
-          console.log("=== Owner Wallet ===");
-          console.log(`Address: ${owner.address}`);
+          console.log("=== Wallet ===");
+          console.log(`Address: ${wallet.address}`);
           console.log("\nNo exchange account found.");
           console.log("Use 'manage deposit' to create one.");
 
-          const ownerEthBalance = await owner.getEthBalance();
-          const ownerTokenBalance = await owner.getTokenBalance(
+          const ethBalance = await wallet.getEthBalance();
+          const tokenBalance = await wallet.getTokenBalance(
             config.chain.collateralToken
           );
           console.log("\n=== Wallet Balances ===");
-          console.log(`ETH: ${Number(ownerEthBalance) / 1e18}`);
-          console.log(`USD stable: ${Number(ownerTokenBalance) / 1e6}`);
+          console.log(`ETH: ${Number(ethBalance) / 1e18}`);
+          console.log(`USD stable: ${Number(tokenBalance) / 1e6}`);
           return;
         }
 
         if (accountInfo.accountId === 0n) {
-          console.log("=== Owner Wallet ===");
-          console.log(`Address: ${owner.address}`);
+          console.log("=== Wallet ===");
+          console.log(`Address: ${wallet.address}`);
           console.log("\nNo exchange account found.");
           console.log("Use 'manage deposit' to create one.");
           return;
         }
 
         console.log("=== Exchange Account ===");
-        console.log(`Owner: ${owner.address}`);
+        console.log(`Address: ${wallet.address}`);
         console.log(`Account ID: ${accountInfo.accountId}`);
         console.log(`Balance: ${Number(accountInfo.balanceCNS) / 1e6} USD stable`);
         console.log(`Locked: ${Number(accountInfo.lockedBalanceCNS) / 1e6} USD stable`);
@@ -126,15 +126,15 @@ export function registerManageCommand(program: Command): void {
           }
         }
 
-        // Owner wallet balances
-        const ownerEthBalance = await owner.getEthBalance();
-        const ownerTokenBalance = await owner.getTokenBalance(
+        // Wallet balances
+        const ethBalance = await wallet.getEthBalance();
+        const tokenBalance = await wallet.getTokenBalance(
           config.chain.collateralToken
         );
 
         console.log("\n=== Wallet Balances ===");
-        console.log(`ETH: ${Number(ownerEthBalance) / 1e18}`);
-        console.log(`USD stable: ${Number(ownerTokenBalance) / 1e6}`);
+        console.log(`ETH: ${Number(ethBalance) / 1e18}`);
+        console.log(`USD stable: ${Number(tokenBalance) / 1e6}`);
       } catch (error) {
         console.error("Failed to fetch status:", error);
         process.exit(1);
@@ -148,17 +148,17 @@ export function registerManageCommand(program: Command): void {
     .requiredOption("--amount <amount>", "Amount to deposit in USD stable")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
       const exchange = new Exchange(
         config.chain.exchangeAddress,
-        owner.publicClient,
-        owner.walletClient
+        wallet.publicClient,
+        wallet.walletClient
       );
       const client = new HybridClient({ exchange });
 
@@ -169,13 +169,13 @@ export function registerManageCommand(program: Command): void {
       let accountExists = false;
       let accountInfo;
       try {
-        accountInfo = await client.getAccountByAddress(owner.address);
+        accountInfo = await client.getAccountByAddress(wallet.address);
         accountExists = accountInfo.accountId > 0n;
       } catch {
         accountExists = false;
       }
 
-      const account = owner.walletClient.account;
+      const account = wallet.walletClient.account;
       if (!account) throw new Error("No account");
 
       if (!accountExists) {
@@ -183,58 +183,58 @@ export function registerManageCommand(program: Command): void {
 
         // Approve tokens
         console.log("Approving tokens...");
-        const approveHash = await owner.walletClient.writeContract({
+        const approveHash = await wallet.walletClient.writeContract({
           address: config.chain.collateralToken,
           abi: ERC20Abi,
           functionName: "approve",
           args: [config.chain.exchangeAddress, amountCNS],
           account,
-          chain: owner.walletClient.chain,
+          chain: wallet.walletClient.chain,
         });
         console.log(`Approve tx: ${approveHash}`);
-        await owner.publicClient.waitForTransactionReceipt({ hash: approveHash });
+        await wallet.publicClient.waitForTransactionReceipt({ hash: approveHash });
 
         // Create account
         console.log("Creating account...");
-        const createHash = await owner.walletClient.writeContract({
+        const createHash = await wallet.walletClient.writeContract({
           address: config.chain.exchangeAddress,
           abi: ExchangeAbi,
           functionName: "createAccount",
           args: [amountCNS],
           account,
-          chain: owner.walletClient.chain,
+          chain: wallet.walletClient.chain,
         });
         console.log(`Create account tx: ${createHash}`);
 
         // Get new account ID
-        await owner.publicClient.waitForTransactionReceipt({ hash: createHash });
-        const newAccountInfo = await client.getAccountByAddress(owner.address);
+        await wallet.publicClient.waitForTransactionReceipt({ hash: createHash });
+        const newAccountInfo = await client.getAccountByAddress(wallet.address);
         console.log(`Account created with ID: ${newAccountInfo.accountId}`);
       } else {
         console.log(`Depositing ${amount} USD stable to account ${accountInfo!.accountId}...`);
 
         // Approve tokens
         console.log("Approving tokens...");
-        const approveHash = await owner.walletClient.writeContract({
+        const approveHash = await wallet.walletClient.writeContract({
           address: config.chain.collateralToken,
           abi: ERC20Abi,
           functionName: "approve",
           args: [config.chain.exchangeAddress, amountCNS],
           account,
-          chain: owner.walletClient.chain,
+          chain: wallet.walletClient.chain,
         });
         console.log(`Approve tx: ${approveHash}`);
-        await owner.publicClient.waitForTransactionReceipt({ hash: approveHash });
+        await wallet.publicClient.waitForTransactionReceipt({ hash: approveHash });
 
         // Deposit
         console.log("Depositing...");
-        const depositHash = await owner.walletClient.writeContract({
+        const depositHash = await wallet.walletClient.writeContract({
           address: config.chain.exchangeAddress,
           abi: ExchangeAbi,
           functionName: "depositCollateral",
           args: [amountCNS],
           account,
-          chain: owner.walletClient.chain,
+          chain: wallet.walletClient.chain,
         });
         console.log(`Deposit tx: ${depositHash}`);
       }
@@ -247,14 +247,14 @@ export function registerManageCommand(program: Command): void {
     .requiredOption("--amount <amount>", "Amount to withdraw in USD stable")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
-      const owner = OwnerWallet.fromPrivateKey(
-        config.ownerPrivateKey,
+      const wallet = Wallet.fromPrivateKey(
+        config.privateKey,
         config.chain
       );
 
-      const account = owner.walletClient.account;
+      const account = wallet.walletClient.account;
       if (!account) throw new Error("No account");
 
       const amount = parseFloat(options.amount);
@@ -263,13 +263,13 @@ export function registerManageCommand(program: Command): void {
       console.log(`Withdrawing ${amount} USD stable...`);
 
       try {
-        const txHash = await owner.walletClient.writeContract({
+        const txHash = await wallet.walletClient.writeContract({
           address: config.chain.exchangeAddress,
           abi: ExchangeAbi,
           functionName: "withdrawCollateral",
           args: [amountCNS],
           account,
-          chain: owner.walletClient.chain,
+          chain: wallet.walletClient.chain,
         });
         console.log(`Transaction submitted: ${txHash}`);
       } catch (error) {

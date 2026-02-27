@@ -191,14 +191,13 @@ export interface PriceLevelOrder {
 
 /**
  * Exchange contract wrapper
- * Can be used directly or through a DelegatedAccount
+ * Direct interaction with the Perpl Exchange contract
  * Supports API-first queries with contract fallback
  */
 export class Exchange {
   public readonly address: Address;
   private readonly publicClient: PublicClient;
   private readonly walletClient?: WalletClient;
-  private readonly delegatedAccount?: Address;
   private readonly apiClient?: PerplApiClient;
   private readonly useApi: boolean;
 
@@ -206,13 +205,11 @@ export class Exchange {
     address: Address,
     publicClient: PublicClient,
     walletClient?: WalletClient,
-    delegatedAccount?: Address,
     apiClient?: PerplApiClient
   ) {
     this.address = address;
     this.publicClient = publicClient;
     this.walletClient = walletClient;
-    this.delegatedAccount = delegatedAccount;
     this.apiClient = apiClient;
     this.useApi = USE_API && !!apiClient;
   }
@@ -229,32 +226,6 @@ export class Exchange {
    */
   getApiClient(): PerplApiClient | undefined {
     return this.apiClient;
-  }
-
-  /**
-   * Create an Exchange instance that operates through a DelegatedAccount
-   */
-  static withDelegatedAccount(
-    exchangeAddress: Address,
-    delegatedAccountAddress: Address,
-    publicClient: PublicClient,
-    walletClient?: WalletClient,
-    apiClient?: PerplApiClient
-  ): Exchange {
-    return new Exchange(
-      exchangeAddress,
-      publicClient,
-      walletClient,
-      delegatedAccountAddress,
-      apiClient
-    );
-  }
-
-  /**
-   * Get the address to call (DelegatedAccount if set, otherwise Exchange directly)
-   */
-  private getCallAddress(): Address {
-    return this.delegatedAccount ?? this.address;
   }
 
   private ensureWalletClient(): WalletClient {
@@ -882,7 +853,6 @@ export class Exchange {
   }
 
   // ============ Write Functions ============
-  // These go through the DelegatedAccount if set
 
   /**
    * Execute a single order
@@ -892,7 +862,7 @@ export class Exchange {
     const account = walletClient.account;
     if (!account) throw new Error("Wallet client must have an account");
 
-    const callAddress = this.getCallAddress();
+    const callAddress = this.address;
 
     // Encode the function call
     const data = encodeFunctionData({
@@ -936,7 +906,7 @@ export class Exchange {
     const account = walletClient.account;
     if (!account) throw new Error("Wallet client must have an account");
 
-    const callAddress = this.getCallAddress();
+    const callAddress = this.address;
 
     const data = encodeFunctionData({
       abi: ExchangeAbi,
@@ -979,11 +949,35 @@ export class Exchange {
     const account = walletClient.account;
     if (!account) throw new Error("Wallet client must have an account");
 
-    const callAddress = this.getCallAddress();
+    const callAddress = this.address;
 
     const data = encodeFunctionData({
       abi: ExchangeAbi,
       functionName: "depositCollateral",
+      args: [amountCNS],
+    });
+
+    return walletClient.sendTransaction({
+      account,
+      to: callAddress,
+      data,
+      chain: walletClient.chain,
+    });
+  }
+
+  /**
+   * Withdraw collateral from account
+   */
+  async withdrawCollateral(amountCNS: bigint): Promise<Hash> {
+    const walletClient = this.ensureWalletClient();
+    const account = walletClient.account;
+    if (!account) throw new Error("Wallet client must have an account");
+
+    const callAddress = this.address;
+
+    const data = encodeFunctionData({
+      abi: ExchangeAbi,
+      functionName: "withdrawCollateral",
       args: [amountCNS],
     });
 
@@ -1006,7 +1000,7 @@ export class Exchange {
     const account = walletClient.account;
     if (!account) throw new Error("Wallet client must have an account");
 
-    const callAddress = this.getCallAddress();
+    const callAddress = this.address;
 
     const data = encodeFunctionData({
       abi: ExchangeAbi,
@@ -1034,7 +1028,7 @@ export class Exchange {
     const account = walletClient.account;
     if (!account) throw new Error("Wallet client must have an account");
 
-    const callAddress = this.getCallAddress();
+    const callAddress = this.address;
 
     const data = encodeFunctionData({
       abi: ExchangeAbi,
@@ -1064,7 +1058,7 @@ export class Exchange {
     const account = walletClient.account;
     if (!account) throw new Error("Wallet client must have an account");
 
-    const callAddress = this.getCallAddress();
+    const callAddress = this.address;
 
     const data = encodeFunctionData({
       abi: ExchangeAbi,
@@ -1088,7 +1082,7 @@ export class Exchange {
     const account = walletClient.account;
     if (!account) throw new Error("Wallet client must have an account");
 
-    const callAddress = this.getCallAddress();
+    const callAddress = this.address;
 
     const data = encodeFunctionData({
       abi: ExchangeAbi,

@@ -1,6 +1,6 @@
 /**
- * Operator wallet operations
- * Hot wallet used for trading operations
+ * Unified wallet for all trading operations
+ * Single wallet class that trades directly on the Exchange
  * Supports WebSocket order submission with contract fallback
  */
 
@@ -15,22 +15,33 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { Exchange, type OrderDesc, OrderType } from "../contracts/Exchange.js";
+import { ERC20Abi } from "../contracts/abi.js";
 import type { ChainConfig } from "../config.js";
 import { PerplApiClient } from "../api/client.js";
 import { PerplWebSocketClient } from "../api/websocket.js";
+import { OrderFlags } from "../api/types.js";
 import { API_CONFIG, USE_API } from "../config.js";
 
+function toWsFlags(params: {
+  postOnly?: boolean;
+  fillOrKill?: boolean;
+  immediateOrCancel?: boolean;
+}): OrderFlags {
+  if (params.immediateOrCancel) return OrderFlags.ImmediateOrCancel;
+  if (params.fillOrKill) return OrderFlags.FillOrKill;
+  if (params.postOnly) return OrderFlags.PostOnly;
+  return OrderFlags.GoodTillCancel;
+}
+
 /**
- * Operator wallet for executing trades through DelegatedAccount
- * Can only call allowlisted Exchange functions
+ * Unified wallet for executing trades directly on the Exchange
  * Supports WebSocket order submission for faster execution
  */
-export class OperatorWallet {
+export class Wallet {
   public readonly address: Address;
   public readonly publicClient: PublicClient;
   public readonly walletClient: WalletClient;
   private exchange?: Exchange;
-  private delegatedAccountAddress?: Address;
   private apiClient?: PerplApiClient;
   private wsClient?: PerplWebSocketClient;
   private accountId?: number;
@@ -47,12 +58,12 @@ export class OperatorWallet {
   }
 
   /**
-   * Create an OperatorWallet from a private key
+   * Create a Wallet from a private key
    */
   static fromPrivateKey(
     privateKey: `0x${string}`,
     chainConfig: ChainConfig
-  ): OperatorWallet {
+  ): Wallet {
     const account = privateKeyToAccount(privateKey);
 
     const publicClient = createPublicClient({
@@ -66,32 +77,28 @@ export class OperatorWallet {
       transport: http(chainConfig.rpcUrl),
     });
 
-    return new OperatorWallet(account.address, publicClient, walletClient);
+    return new Wallet(account.address, publicClient, walletClient);
   }
 
   /**
-   * Connect to Exchange through a DelegatedAccount
+   * Connect to Exchange directly
    * Optionally enables API mode for faster order submission
    */
   connect(
     exchangeAddress: Address,
-    delegatedAccountAddress: Address,
     options?: {
       enableApi?: boolean;
       apiClient?: PerplApiClient;
     }
   ): Exchange {
-    this.delegatedAccountAddress = delegatedAccountAddress;
-
     // Create API client if enabled
     if (options?.enableApi !== false && USE_API) {
       this.apiClient = options?.apiClient ?? new PerplApiClient(API_CONFIG);
       this.useApi = true;
     }
 
-    this.exchange = Exchange.withDelegatedAccount(
+    this.exchange = new Exchange(
       exchangeAddress,
-      delegatedAccountAddress,
       this.publicClient,
       this.walletClient,
       this.apiClient
@@ -183,6 +190,13 @@ export class OperatorWallet {
   }
 
   /**
+   * Check if WebSocket is ready for order submission
+   */
+  private get wsReady(): boolean {
+    return !!(this.wsClient?.isConnected() && this.accountId !== undefined);
+  }
+
+  /**
    * Get the connected Exchange
    */
   getExchange(): Exchange {
@@ -190,16 +204,6 @@ export class OperatorWallet {
       throw new Error("Not connected to Exchange. Call connect() first.");
     }
     return this.exchange;
-  }
-
-  /**
-   * Get the DelegatedAccount address
-   */
-  getDelegatedAccountAddress(): Address {
-    if (!this.delegatedAccountAddress) {
-      throw new Error("Not connected to a DelegatedAccount. Call connect() first.");
-    }
-    return this.delegatedAccountAddress;
   }
 
   /**
@@ -218,6 +222,7 @@ export class OperatorWallet {
 
   /**
    * Open a long position
+   * Uses WebSocket if connected, falls back to RPC
    */
   async openLong(params: {
     perpId: bigint;
@@ -229,7 +234,22 @@ export class OperatorWallet {
     immediateOrCancel?: boolean;
     expiryBlock?: bigint;
     nonce?: number;
-  }): Promise<Hash> {
+  }): Promise<Hash | number> {
+    if (this.wsReady) {
+      try {
+        const lastBlock = await this.getCurrentBlock();
+        return this.wsClient!.openLong({
+          marketId: Number(params.perpId),
+          accountId: this.accountId!,
+          size: Number(params.lotLNS),
+          price: Number(params.pricePNS),
+          leverage: Number(params.leverageHdths),
+          lastBlock: lastBlock + 100,
+          flags: toWsFlags(params),
+        });
+      } catch { /* fall through to RPC */ }
+    }
+
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
       perpId: params.perpId,
@@ -253,6 +273,7 @@ export class OperatorWallet {
 
   /**
    * Open a short position
+   * Uses WebSocket if connected, falls back to RPC
    */
   async openShort(params: {
     perpId: bigint;
@@ -264,7 +285,22 @@ export class OperatorWallet {
     immediateOrCancel?: boolean;
     expiryBlock?: bigint;
     nonce?: number;
-  }): Promise<Hash> {
+  }): Promise<Hash | number> {
+    if (this.wsReady) {
+      try {
+        const lastBlock = await this.getCurrentBlock();
+        return this.wsClient!.openShort({
+          marketId: Number(params.perpId),
+          accountId: this.accountId!,
+          size: Number(params.lotLNS),
+          price: Number(params.pricePNS),
+          leverage: Number(params.leverageHdths),
+          lastBlock: lastBlock + 100,
+          flags: toWsFlags(params),
+        });
+      } catch { /* fall through to RPC */ }
+    }
+
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
       perpId: params.perpId,
@@ -288,6 +324,7 @@ export class OperatorWallet {
 
   /**
    * Close a long position
+   * Uses WebSocket if connected and positionId provided, falls back to RPC
    */
   async closeLong(params: {
     perpId: bigint;
@@ -297,7 +334,23 @@ export class OperatorWallet {
     fillOrKill?: boolean;
     immediateOrCancel?: boolean;
     expiryBlock?: bigint;
-  }): Promise<Hash> {
+    positionId?: number;
+  }): Promise<Hash | number> {
+    if (this.wsReady && params.positionId !== undefined) {
+      try {
+        const lastBlock = await this.getCurrentBlock();
+        return this.wsClient!.closeLong({
+          marketId: Number(params.perpId),
+          accountId: this.accountId!,
+          positionId: params.positionId,
+          size: Number(params.lotLNS),
+          price: Number(params.pricePNS),
+          lastBlock: lastBlock + 100,
+          flags: toWsFlags(params),
+        });
+      } catch { /* fall through to RPC */ }
+    }
+
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
       perpId: params.perpId,
@@ -321,6 +374,7 @@ export class OperatorWallet {
 
   /**
    * Close a short position
+   * Uses WebSocket if connected and positionId provided, falls back to RPC
    */
   async closeShort(params: {
     perpId: bigint;
@@ -330,7 +384,23 @@ export class OperatorWallet {
     fillOrKill?: boolean;
     immediateOrCancel?: boolean;
     expiryBlock?: bigint;
-  }): Promise<Hash> {
+    positionId?: number;
+  }): Promise<Hash | number> {
+    if (this.wsReady && params.positionId !== undefined) {
+      try {
+        const lastBlock = await this.getCurrentBlock();
+        return this.wsClient!.closeShort({
+          marketId: Number(params.perpId),
+          accountId: this.accountId!,
+          positionId: params.positionId,
+          size: Number(params.lotLNS),
+          price: Number(params.pricePNS),
+          lastBlock: lastBlock + 100,
+          flags: toWsFlags(params),
+        });
+      } catch { /* fall through to RPC */ }
+    }
+
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
       perpId: params.perpId,
@@ -354,8 +424,21 @@ export class OperatorWallet {
 
   /**
    * Cancel an order
+   * Uses WebSocket if connected, falls back to RPC
    */
-  async cancelOrder(perpId: bigint, orderId: bigint): Promise<Hash> {
+  async cancelOrder(perpId: bigint, orderId: bigint): Promise<Hash | number> {
+    if (this.wsReady) {
+      try {
+        const lastBlock = await this.getCurrentBlock();
+        return this.wsClient!.cancelOrder(
+          Number(perpId),
+          this.accountId!,
+          Number(orderId),
+          lastBlock + 100,
+        );
+      } catch { /* fall through to RPC */ }
+    }
+
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
       perpId,
@@ -379,6 +462,7 @@ export class OperatorWallet {
 
   /**
    * Modify an existing order
+   * Uses WebSocket if connected, falls back to RPC
    */
   async modifyOrder(params: {
     perpId: bigint;
@@ -388,7 +472,23 @@ export class OperatorWallet {
     leverageHdths?: bigint;
     postOnly?: boolean;
     expiryBlock?: bigint;
-  }): Promise<Hash> {
+  }): Promise<Hash | number> {
+    if (this.wsReady) {
+      try {
+        const lastBlock = await this.getCurrentBlock();
+        return this.wsClient!.changeOrder({
+          marketId: Number(params.perpId),
+          accountId: this.accountId!,
+          orderId: Number(params.orderId),
+          size: Number(params.lotLNS),
+          price: Number(params.pricePNS),
+          leverage: Number(params.leverageHdths ?? 100n),
+          lastBlock: lastBlock + 100,
+          flags: params.postOnly ? OrderFlags.PostOnly : OrderFlags.GoodTillCancel,
+        });
+      } catch { /* fall through to RPC */ }
+    }
+
     const orderDesc: OrderDesc = {
       orderDescId: 0n,
       perpId: params.perpId,
@@ -415,6 +515,13 @@ export class OperatorWallet {
    */
   async depositCollateral(amountCNS: bigint): Promise<Hash> {
     return this.getExchange().depositCollateral(amountCNS);
+  }
+
+  /**
+   * Withdraw collateral from account
+   */
+  async withdrawCollateral(amountCNS: bigint): Promise<Hash> {
+    return this.getExchange().withdrawCollateral(amountCNS);
   }
 
   /**
@@ -464,31 +571,29 @@ export class OperatorWallet {
     return this.publicClient.getBalance({ address: this.address });
   }
 
+  /**
+   * Get balance of a token
+   */
+  async getTokenBalance(tokenAddress: Address): Promise<bigint> {
+    return this.publicClient.readContract({
+      address: tokenAddress,
+      abi: ERC20Abi,
+      functionName: "balanceOf",
+      args: [this.address],
+    }) as Promise<bigint>;
+  }
+
   // ============ Market Orders (IOC) ============
 
   /**
    * Market buy (open long with IOC)
-   * Uses WebSocket if connected, otherwise contract
    */
   async marketOpenLong(params: {
     perpId: bigint;
     lotLNS: bigint;
     leverageHdths: bigint;
-    maxPricePNS: bigint; // Maximum price willing to pay
+    maxPricePNS: bigint;
   }): Promise<Hash | number> {
-    // Use WebSocket if connected
-    if (this.wsClient?.isConnected() && this.accountId !== undefined) {
-      const lastBlock = await this.getCurrentBlock();
-      return this.wsClient.openLong({
-        marketId: Number(params.perpId),
-        accountId: this.accountId,
-        size: Number(params.lotLNS),
-        leverage: Number(params.leverageHdths),
-        lastBlock: lastBlock + 100, // Buffer for block finality
-      });
-    }
-
-    // Contract fallback
     return this.openLong({
       perpId: params.perpId,
       pricePNS: params.maxPricePNS,
@@ -500,27 +605,13 @@ export class OperatorWallet {
 
   /**
    * Market sell (open short with IOC)
-   * Uses WebSocket if connected, otherwise contract
    */
   async marketOpenShort(params: {
     perpId: bigint;
     lotLNS: bigint;
     leverageHdths: bigint;
-    minPricePNS: bigint; // Minimum price willing to accept
+    minPricePNS: bigint;
   }): Promise<Hash | number> {
-    // Use WebSocket if connected
-    if (this.wsClient?.isConnected() && this.accountId !== undefined) {
-      const lastBlock = await this.getCurrentBlock();
-      return this.wsClient.openShort({
-        marketId: Number(params.perpId),
-        accountId: this.accountId,
-        size: Number(params.lotLNS),
-        leverage: Number(params.leverageHdths),
-        lastBlock: lastBlock + 100,
-      });
-    }
-
-    // Contract fallback
     return this.openShort({
       perpId: params.perpId,
       pricePNS: params.minPricePNS,
@@ -532,63 +623,37 @@ export class OperatorWallet {
 
   /**
    * Market close long (with IOC)
-   * Uses WebSocket if connected, otherwise contract
    */
   async marketCloseLong(params: {
     perpId: bigint;
     lotLNS: bigint;
-    minPricePNS: bigint; // Minimum price willing to accept
-    positionId?: number; // Required for WebSocket
+    minPricePNS: bigint;
+    positionId?: number;
   }): Promise<Hash | number> {
-    // Use WebSocket if connected and positionId provided
-    if (this.wsClient?.isConnected() && this.accountId !== undefined && params.positionId !== undefined) {
-      const lastBlock = await this.getCurrentBlock();
-      return this.wsClient.closeLong({
-        marketId: Number(params.perpId),
-        accountId: this.accountId,
-        positionId: params.positionId,
-        size: Number(params.lotLNS),
-        lastBlock: lastBlock + 100,
-      });
-    }
-
-    // Contract fallback
     return this.closeLong({
       perpId: params.perpId,
       pricePNS: params.minPricePNS,
       lotLNS: params.lotLNS,
       immediateOrCancel: true,
+      positionId: params.positionId,
     });
   }
 
   /**
    * Market close short (with IOC)
-   * Uses WebSocket if connected, otherwise contract
    */
   async marketCloseShort(params: {
     perpId: bigint;
     lotLNS: bigint;
-    maxPricePNS: bigint; // Maximum price willing to pay
-    positionId?: number; // Required for WebSocket
+    maxPricePNS: bigint;
+    positionId?: number;
   }): Promise<Hash | number> {
-    // Use WebSocket if connected and positionId provided
-    if (this.wsClient?.isConnected() && this.accountId !== undefined && params.positionId !== undefined) {
-      const lastBlock = await this.getCurrentBlock();
-      return this.wsClient.closeShort({
-        marketId: Number(params.perpId),
-        accountId: this.accountId,
-        positionId: params.positionId,
-        size: Number(params.lotLNS),
-        lastBlock: lastBlock + 100,
-      });
-    }
-
-    // Contract fallback
     return this.closeShort({
       perpId: params.perpId,
       pricePNS: params.maxPricePNS,
       lotLNS: params.lotLNS,
       immediateOrCancel: true,
+      positionId: params.positionId,
     });
   }
 
@@ -602,12 +667,14 @@ export class OperatorWallet {
     lotLNS: bigint;
     pricePNS: bigint;
     immediateOrCancel?: boolean;
-  }): Promise<Hash> {
+    positionId?: number;
+  }): Promise<Hash | number> {
     return this.closeLong({
       perpId: params.perpId,
       pricePNS: params.pricePNS,
       lotLNS: params.lotLNS,
       immediateOrCancel: params.immediateOrCancel ?? false,
+      positionId: params.positionId,
     });
   }
 
@@ -619,12 +686,14 @@ export class OperatorWallet {
     lotLNS: bigint;
     pricePNS: bigint;
     immediateOrCancel?: boolean;
-  }): Promise<Hash> {
+    positionId?: number;
+  }): Promise<Hash | number> {
     return this.closeShort({
       perpId: params.perpId,
       pricePNS: params.pricePNS,
       lotLNS: params.lotLNS,
       immediateOrCancel: params.immediateOrCancel ?? false,
+      positionId: params.positionId,
     });
   }
 

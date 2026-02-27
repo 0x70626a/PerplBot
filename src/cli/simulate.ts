@@ -5,7 +5,7 @@
 import type { Command } from "commander";
 import {
   loadEnvConfig,
-  validateOwnerConfig,
+  validateConfig,
   PERPETUALS,
   runStrategySimulation,
   printStrategySimReport,
@@ -64,7 +64,7 @@ export function registerSimulateCommand(program: Command): void {
     .action(async (options) => {
       try {
         const config = loadEnvConfig();
-        validateOwnerConfig(config);
+        validateConfig(config);
 
         const strategyType = options.strategy.toLowerCase();
         if (strategyType !== "grid" && strategyType !== "mm") {

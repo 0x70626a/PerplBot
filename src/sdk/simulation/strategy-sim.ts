@@ -225,8 +225,8 @@ export async function runStrategySimulation(
   simConfig: StrategySimConfig,
 ): Promise<StrategySimResult> {
   // Validate
-  if (!envConfig.ownerPrivateKey) {
-    throw new Error("OWNER_PRIVATE_KEY is required for strategy simulation");
+  if (!envConfig.privateKey) {
+    throw new Error("PRIVATE_KEY is required for strategy simulation");
   }
   if (simConfig.strategyType === "grid" && !simConfig.grid) {
     throw new Error("Grid config is required for grid strategy");
@@ -235,15 +235,12 @@ export async function runStrategySimulation(
     throw new Error("MM config is required for market maker strategy");
   }
 
-  const account = privateKeyToAccount(envConfig.ownerPrivateKey);
+  const account = privateKeyToAccount(envConfig.privateKey!);
   const exchangeAddress = envConfig.chain.exchangeAddress;
   const rpcUrl = envConfig.chain.rpcUrl;
 
-  // If DelegatedAccount is configured, trades route through it and the
-  // exchange account lives at the DelegatedAccount address (not the EOA).
-  const delegatedAccount = envConfig.delegatedAccountAddress;
-  const callAddress: Address = delegatedAccount ?? exchangeAddress;
-  const accountAddress: Address = delegatedAccount ?? account.address;
+  const callAddress: Address = exchangeAddress;
+  const accountAddress: Address = account.address;
 
   // Check Anvil
   if (!(await isAnvilInstalled())) {

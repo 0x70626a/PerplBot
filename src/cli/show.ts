@@ -7,7 +7,7 @@ import { createPublicClient, http, parseAbiItem } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   loadEnvConfig,
-  validateOwnerConfig,
+  validateConfig,
   Exchange,
   HybridClient,
   PERPETUALS,
@@ -394,7 +394,7 @@ export function registerShowCommand(program: Command): void {
     .option("--fork", "Use fork-based simulation (requires Anvil)")
     .action(async (options) => {
       const config = loadEnvConfig();
-      validateOwnerConfig(config);
+      validateConfig(config);
 
       const publicClient = createPublicClient({
         chain: config.chain.chain,
@@ -407,7 +407,7 @@ export function registerShowCommand(program: Command): void {
       const exchange = new Exchange(exchangeAddr, publicClient);
 
       // Get account
-      const account = privateKeyToAccount(config.ownerPrivateKey!);
+      const account = privateKeyToAccount(config.privateKey);
       const accountInfo = await exchange.getAccountByAddress(account.address);
       if (accountInfo.accountId === 0n) {
         console.error("No exchange account found for this wallet.");

@@ -112,16 +112,6 @@ export function multiUserAuthMiddleware(): MiddlewareFn<BotContext> {
       return next();
     }
 
-    // Account commands and natural language require delegated account
-    if (!user.delegatedAccount) {
-      await ctx.reply(
-        "Please set your DelegatedAccount first.\n\n" +
-          "Use: /setaccount <delegated_account_address>\n\n" +
-          "Need to deploy one? Visit perpl.xyz"
-      );
-      return;
-    }
-
     return next();
   };
 }

@@ -33,12 +33,3 @@ export type CallbackContext = NarrowedContext<
   Update.CallbackQueryUpdate<CallbackQuery>
 >;
 
-/**
- * Bot operator configuration
- */
-export interface BotOperatorConfig {
-  /** Bot operator private key (for trading on users' DelegatedAccounts) */
-  operatorPrivateKey: `0x${string}`;
-  /** Bot operator address (derived from private key) */
-  operatorAddress: `0x${string}`;
-}

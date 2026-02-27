@@ -5,11 +5,9 @@
  */
 
 import { Command } from "commander";
-import { registerDeployCommand } from "./deploy.js";
 import { registerTradeCommand } from "./trade.js";
 import { registerManageCommand } from "./manage.js";
 import { registerShowCommand } from "./show.js";
-import { registerDelegateCommand } from "./delegate.js";
 import { registerDebugCommand } from "./debug.js";
 import { registerSimulateCommand } from "./simulate.js";
 
@@ -22,11 +20,9 @@ program
   .option("--no-api", "Disable API mode, use contract calls only");
 
 // Register commands
-registerDeployCommand(program);
 registerTradeCommand(program);
 registerManageCommand(program);
 registerShowCommand(program);
-registerDelegateCommand(program);
 registerDebugCommand(program);
 registerSimulateCommand(program);
 

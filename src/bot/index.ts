@@ -15,8 +15,8 @@ import { handleMarkets } from "./handlers/markets.js";
 import { handleTradeConfirm, handleTradeCancel } from "./handlers/trade.js";
 import { handleMessage } from "./handlers/message.js";
 import { handleLink, handleVerify } from "./handlers/link.js";
-import { handleSetAccount, handleWhoami, handleUnlink } from "./handlers/account.js";
-import { handleDeploy, handleContracts } from "./handlers/deploy.js";
+import { handleWhoami, handleUnlink } from "./handlers/account.js";
+import { handleContracts } from "./handlers/deploy.js";
 import { formatWelcome, formatHelp } from "./formatters/telegram.js";
 import { initDatabase, cleanupExpiredRequests } from "./db/index.js";
 import type { BotContext } from "./types.js";
@@ -64,12 +64,8 @@ async function main() {
   bot.command("verify", handleVerify);
 
   // Account management commands
-  bot.command("setaccount", handleSetAccount);
   bot.command("whoami", handleWhoami);
   bot.command("unlink", handleUnlink);
-
-  // Deployment commands
-  bot.command("deploy", handleDeploy);
   bot.command("contracts", handleContracts);
 
   // Trading commands

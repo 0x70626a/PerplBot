@@ -2,21 +2,19 @@
  * SDK Bridge — singleton SDK init + human-friendly wrapper methods
  * All methods return JSON-safe objects (no BigInt).
  *
- * Order routing (2-path, mode-agnostic):
+ * Order routing (2-path):
  *   Taker (market/IOC) → WebSocket API + submitAndVerify()
  *   Maker (limit/resting) → on-chain exchange.execOrder()
- *
- * Init supports operator mode (DelegatedAccount) and owner mode (direct).
  */
 
 import { parseAbiItem, type Hash, type PublicClient } from "viem";
 import {
   loadEnvConfig,
+  validateConfig,
   type EnvConfig,
   TESTNET_MODE,
-  OperatorWallet,
+  Wallet,
   Portfolio,
-  OwnerWallet,
   Exchange,
   PerplApiClient,
   PerplWebSocketClient,
@@ -47,17 +45,14 @@ import { OrderStatus, type Order } from "../sdk/api/types.js";
 import { captureConsole, ansiToHtml } from "./ansi-html.js";
 
 // Singleton state
+let wallet: Wallet;
 let exchange: Exchange;
 let portfolio: Portfolio;
 let publicClient: PublicClient;
 let envConfig: EnvConfig;
-let mode: "operator" | "owner";
 
 // Last simulation's batch orders — used by "place orders" direct handler
 let lastBatchOrders: Array<{ market: string; side: "long" | "short"; size: number; price: number; leverage: number }> | undefined;
-
-// Only set in operator mode
-let operatorWallet: OperatorWallet | undefined;
 
 // WebSocket client for trigger orders (SL/TP) — set during init
 let wsClient: PerplWebSocketClient | undefined;
@@ -160,111 +155,43 @@ function resolvePerpId(market: string): bigint {
 
 /**
  * Initialize the SDK singletons from environment variables.
- * Detects whether to use operator mode or owner-direct mode.
  */
 export async function initSDK(): Promise<void> {
   const config = loadEnvConfig();
+  validateConfig(config);
   envConfig = config;
 
-  if (config.operatorPrivateKey && config.delegatedAccountAddress) {
-    // ── Operator mode ──
-    mode = "operator";
-    operatorWallet = OperatorWallet.fromPrivateKey(config.operatorPrivateKey, config.chain);
-    exchange = operatorWallet.connect(config.chain.exchangeAddress, config.delegatedAccountAddress);
-    publicClient = operatorWallet.publicClient;
+  wallet = Wallet.fromPrivateKey(config.privateKey, config.chain);
+  exchange = wallet.connect(config.chain.exchangeAddress);
+  publicClient = wallet.publicClient;
 
-    // Try API connect (non-fatal)
-    try {
-      await operatorWallet.connectApi();
-      wsClient = operatorWallet.getWsClient();
-      wsClient?.on("error", (err) => console.warn("[chatbot] WebSocket error:", err.message));
-      console.log("[chatbot] API connected (operator mode)");
-    } catch (err) {
-      console.warn("[chatbot] API connect failed (contract-only):", (err as Error).message);
-    }
-
-    portfolio = new Portfolio(
-      exchange,
-      operatorWallet.publicClient,
-      config.chain.exchangeAddress,
-      operatorWallet.getApiClient(),
-    );
-    await portfolio.setAccountByAddress(config.delegatedAccountAddress);
-
-    // Get account ID for WebSocket trigger orders
-    if (wsClient) {
-      try {
-        const summary = await portfolio.getAccountSummary();
-        wsAccountId = Number(summary.accountId);
-      } catch { /* non-fatal */ }
-    }
-
-    console.log("[chatbot] SDK initialized (operator mode)");
-  } else if (config.ownerPrivateKey) {
-    // ── Owner-direct mode (like CLI trade.ts) ──
-    mode = "owner";
-    const owner = OwnerWallet.fromPrivateKey(config.ownerPrivateKey, config.chain);
-    publicClient = owner.publicClient;
-
-    // Optionally authenticate API
-    let apiClient: PerplApiClient | undefined;
-    if (USE_API) {
-      try {
-        apiClient = new PerplApiClient(API_CONFIG);
-        const signMessage = async (message: string) => {
-          return owner.walletClient.signMessage({
-            account: owner.walletClient.account!,
-            message,
-          });
-        };
-        await apiClient.authenticate(owner.address, signMessage);
-        console.log("[chatbot] API authenticated (owner mode)");
-      } catch (err) {
-        console.warn("[chatbot] API auth failed (contract-only):", (err as Error).message);
-        apiClient = undefined;
-      }
-    }
-
-    exchange = new Exchange(
-      config.chain.exchangeAddress,
-      owner.publicClient,
-      owner.walletClient,
-      undefined,
-      apiClient,
-    );
-
-    portfolio = new Portfolio(
-      exchange,
-      owner.publicClient,
-      config.chain.exchangeAddress,
-      apiClient,
-    );
-    await portfolio.setAccountByAddress(owner.address);
-
-    // WebSocket for trigger orders (SL/TP)
-    if (apiClient) {
-      try {
-        const authNonce = apiClient.getAuthNonce();
-        const authCookies = apiClient.getAuthCookies();
-        if (authNonce) {
-          wsClient = new PerplWebSocketClient(API_CONFIG.wsUrl, API_CONFIG.chainId);
-          wsClient.on("error", (err) => console.warn("[chatbot] WebSocket error:", err.message));
-          await wsClient.connectTrading(authNonce, authCookies || undefined);
-          const summary = await portfolio.getAccountSummary();
-          wsAccountId = Number(summary.accountId);
-          console.log("[chatbot] WebSocket connected (owner mode)");
-        }
-      } catch (err) {
-        console.warn("[chatbot] WebSocket connect failed:", (err as Error).message);
-      }
-    }
-
-    console.log("[chatbot] SDK initialized (owner mode)");
-  } else {
-    throw new Error(
-      "Either OPERATOR_PRIVATE_KEY + DELEGATED_ACCOUNT_ADDRESS, or OWNER_PRIVATE_KEY must be set",
-    );
+  // Try API connect (non-fatal)
+  try {
+    await wallet.connectApi();
+    wsClient = wallet.getWsClient();
+    wsClient?.on("error", (err) => console.warn("[chatbot] WebSocket error:", err.message));
+    console.log("[chatbot] API connected");
+  } catch (err) {
+    console.warn("[chatbot] API connect failed (contract-only):", (err as Error).message);
   }
+
+  portfolio = new Portfolio(
+    exchange,
+    wallet.publicClient,
+    config.chain.exchangeAddress,
+    wallet.getApiClient(),
+  );
+  await portfolio.setAccountByAddress(wallet.address);
+
+  // Get account ID for WebSocket trigger orders
+  if (wsClient) {
+    try {
+      const summary = await portfolio.getAccountSummary();
+      wsAccountId = Number(summary.accountId);
+    } catch { /* non-fatal */ }
+  }
+
+  console.log("[chatbot] SDK initialized");
 }
 
 // ============ Read-only methods ============
@@ -801,10 +728,13 @@ export async function depositCollateral(amount: number) {
 }
 
 export async function withdrawCollateral(amount: number) {
-  // Withdrawals must go through the owner wallet — operator CANNOT withdraw (smart contract enforced)
-  throw new Error(
-    "Withdrawals must be done through the CLI with the owner wallet: npm run dev -- manage withdraw --amount " + amount,
-  );
+  const amountCNS = amountToCNS(amount);
+  const txHash = await exchange.withdrawCollateral(amountCNS);
+  return {
+    success: true,
+    txHash,
+    amount,
+  };
 }
 
 export async function getLiquidationAnalysis(market: string) {
